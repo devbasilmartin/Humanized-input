@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Sign up - Example Library</title>
+</head>
+<body>
+  <header>
+    <nav aria-label="Main">
+      <ul>
+        <li><a href="#">Home</a></li>
+        <li><a href="#">Catalogue</a></li>
+        <li><a href="#">Help</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main>
+    <h1>Create a library account</h1>
+    <p>Borrow e-books and audiobooks for free.</p>
+
+    <form id="signup" novalidate>
+      <h3>Your details</h3> <!-- BUG: skips level 2 -->
+
+      <label for="name">Full name</label>
+      <input id="name" autocomplete="name" required>
+
+      <label for="email">Email</label>
+      <input id="email" type="email" autocomplete="email" required>
+
+      <!-- BUG: visible text but no <label>, so the field has no accessible name -->
+      <p>Library card number</p>
+      <input id="card">
+
+      <label><input id="terms" type="checkbox"> I agree to the terms</label>
+
+      <div role="alert" id="errors"></div>
+
+      <button type="submit">Create account</button>
+      <!-- BUG: icon-only button with no accessible name -->
+      <button type="button" onclick="alert('help')"><svg width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="7"/></svg></button>
+    </form>
+  </main>
+
+  <script>
+    document.getElementById('signup').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const errors = [];
+      const email = document.getElementById('email').value;
+      if (!document.getElementById('name').value.trim()) errors.push('Enter your full name.');
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) errors.push('Enter a valid email address.');
+      if (!document.getElementById('terms').checked) errors.push('You must agree to the terms.');
+      const box = document.getElementById('errors');
+      if (errors.length) {
+        box.textContent = errors.join(' ');
+      } else {
+        document.title = 'Welcome - Example Library';
+        document.querySelector('main').innerHTML =
+          '<h1>Welcome!</h1><p>Your account is ready.</p>';
+      }
+    });
+  </script>
+</body>
+</html>

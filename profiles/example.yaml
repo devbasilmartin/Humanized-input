@@ -1,0 +1,16 @@
+# A custom profile. Load it with load_profile("profiles/example.yaml").
+name: one-handed-typist
+description: >
+  Experienced screen reader user typing with one hand. Normal listening
+  speed, slow and uneven typing, uses Tab to move between controls.
+typing_wpm: 20
+key_jitter: 0.55
+typo_rate: 0.04
+typo_notice_max: 2
+speech_wpm: 350
+skim_words: 3
+reaction_s: 0.5
+think_s: [0.6, 1.8]
+navigation: tab
+max_steps: 80
+seed: 1234
