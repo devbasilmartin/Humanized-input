@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 
 from .ax import FORM_FIELD_ROLES, AXItem
 from .backends import Backend
+from .pointer import PointerEvent, PointerPlanner, click_landed
 from .profiles import Profile
 from .screen_reader import VirtualScreenReader, describe
 from .timing import Clock, Humanizer, VirtualClock
@@ -68,6 +69,7 @@ class SimulatedUser:
         self.profile = profile
         self.clock = clock or VirtualClock()
         self.human = Humanizer(profile)
+        self.pointer = PointerPlanner(self.human)
         self.sr = VirtualScreenReader(backend, speech=speech, clock=self.clock)
         self.report = SessionReport(profile=profile.name)
 
@@ -209,6 +211,48 @@ class SimulatedUser:
 
     def press(self, name: str, kind: str = "button") -> bool:
         return self._goal(f"activate {kind} {name!r}", name, kind, lambda _i: self._press("Enter"))
+
+    # --- mouse ------------------------------------------------------------
+
+    def _run_pointer(self, events: list[PointerEvent]) -> None:
+        for ev in events:
+            self.clock.sleep(ev.delay_before)
+            if ev.kind == "move":
+                self.backend.mouse_move(ev.x, ev.y)
+            else:
+                self.backend.mouse_button(ev.button, ev.kind == "down")
+
+    def click(self, name: str, kind: str = "button", button: str = "left",
+              clicks: int = 1) -> bool:
+        """Click something with the mouse, like a sighted or low-vision user.
+
+        Unlike the keyboard goals, the user finds the target by looking at
+        the screen, not by listening, so it only needs to be on screen. The
+        goal fails if the item has no on-screen box, or if the press or
+        release lands outside it (e.g. a tremor on a tiny target).
+        """
+        start = self.clock.elapsed
+        self._think()  # visual search
+        self.sr.refresh()
+        roles = _KIND_ROLES[kind]
+        item = next((i for i in self.sr.items if self._matches(i, name, roles)), None)
+        box = self.backend.bounds(item) if item is not None else None
+        ok, note = False, ""
+        if item is None:
+            note = "not on screen"
+        elif box is None:
+            note = "has no on-screen box to click"
+        else:
+            events = self.pointer.plan_click(self.backend.mouse_position(), box, button, clicks)
+            self.sr.note(f"moves the mouse to {name!r} and clicks")
+            self._run_pointer(events)
+            ok = click_landed(events, box)
+            if not ok:
+                note = f"missed the target ({box.width:.0f}x{box.height:.0f} px)"
+            self._after_page_change()
+        self.report.goals.append(GoalResult(f"click {kind} {name!r}", ok, 1, self.clock.elapsed - start, note))
+        self.report.elapsed = self.clock.elapsed
+        return ok
 
     def read_page(self) -> list[str]:
         """Listen to the whole page once, top to bottom."""

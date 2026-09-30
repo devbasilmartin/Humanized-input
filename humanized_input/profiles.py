@@ -11,6 +11,12 @@ Every field maps to something you can observe in real screen reader users:
 - reaction_s / think_s: time to react to what was heard and to decide what to
   do next.
 - navigation: the strategy they use to find things (see user.py).
+- pointer_*: how they use a mouse, when they use one (see pointer.py).
+  pointer_a_s / pointer_b_s are the Fitts's law constants (seconds, and
+  seconds per bit of difficulty); pointer_spread scales how widely clicks
+  scatter; pointer_curvature how much paths bow; pointer_tremor_px the
+  amplitude of hand tremor. Most blind users do not use a mouse at all;
+  these matter for low-vision, motor-impaired and sighted keyboard+mouse users.
 """
 
 from __future__ import annotations
@@ -35,6 +41,11 @@ class Profile:
     reaction_s: float = 0.4
     think_s: tuple[float, float] = (0.5, 1.5)
     navigation: str = "tab"
+    pointer_a_s: float = 0.10
+    pointer_b_s: float = 0.15
+    pointer_spread: float = 1.0
+    pointer_curvature: float = 0.08
+    pointer_tremor_px: float = 0.0
     max_steps: int = 80
     seed: int | None = None
     notes: list[str] = field(default_factory=list)
@@ -51,6 +62,10 @@ class Profile:
         lo, hi = self.think_s
         if lo < 0 or hi < lo:
             raise ValueError("think_s must be (low, high) with 0 <= low <= high")
+        if self.pointer_a_s < 0 or self.pointer_b_s <= 0:
+            raise ValueError("pointer_a_s must be >= 0 and pointer_b_s > 0")
+        if self.pointer_spread < 0 or self.pointer_tremor_px < 0:
+            raise ValueError("pointer_spread and pointer_tremor_px must be >= 0")
 
     def with_seed(self, seed: int) -> "Profile":
         return replace(self, seed=seed)
@@ -82,6 +97,8 @@ BUILTIN_PROFILES: dict[str, Profile] = {
         reaction_s=0.25,
         think_s=(0.2, 0.6),
         navigation="quicknav",
+        pointer_a_s=0.08,
+        pointer_b_s=0.11,
     ),
     "intermediate": Profile(
         name="intermediate",
@@ -107,11 +124,16 @@ BUILTIN_PROFILES: dict[str, Profile] = {
         reaction_s=0.7,
         think_s=(1.0, 3.0),
         navigation="linear",
+        pointer_a_s=0.15,
+        pointer_b_s=0.20,
+        pointer_spread=1.3,
+        pointer_curvature=0.12,
     ),
     "motor": Profile(
         name="motor",
         description="Experienced screen reader user with a motor impairment: "
-        "slow, effortful typing but efficient listening.",
+        "slow, effortful typing but efficient listening. Uses a mouse with a "
+        "tremor, so small targets are hard to click.",
         typing_wpm=12,
         key_jitter=0.5,
         typo_rate=0.05,
@@ -120,6 +142,11 @@ BUILTIN_PROFILES: dict[str, Profile] = {
         reaction_s=1.0,
         think_s=(1.0, 2.5),
         navigation="tab",
+        pointer_a_s=0.30,
+        pointer_b_s=0.35,
+        pointer_spread=1.6,
+        pointer_curvature=0.15,
+        pointer_tremor_px=4.0,
     ),
 }
 

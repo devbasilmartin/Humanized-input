@@ -105,6 +105,45 @@ with user_session("https://example.org/signup", load_profile("novice"), speech=P
 
 Custom profiles go in JSON or YAML; see [`profiles/example.yaml`](profiles/example.yaml).
 
+## Mouse input
+
+Low-vision, motor-impaired and sighted users use a mouse too. `user.click()`
+moves the pointer the way a hand does and then clicks. It works in the
+browser (Playwright's mouse) and on Windows (real `SendInput` mouse events).
+
+```python
+with user_session(url, load_profile("motor")) as user:
+    user.click("Create account")             # find it on screen, move, click
+    user.click("I agree", kind="field")
+    user.click("Row 3", kind="any", clicks=2) # double click
+    print(user.report.summary())             # "missed the target (12x12 px)" when it happens
+```
+
+```
+$ python examples/target_sizes.py
+profile            8px   12px   16px   24px   32px   44px   (hit rate from 700 px away)
+expert           100%   100%   100%   100%   100%   100%
+motor             55%    90%    92%    94%    95%    96%
+```
+
+How [`pointer.py`](humanized_input/pointer.py) models a hand:
+
+1. **Fitts's law** sets the movement time, `a + b*log2(D/W + 1)`, so small,
+   far targets take longer. `pointer_a_s` / `pointer_b_s` in the profile.
+2. **Submovements.** The first fast move undershoots a little and scatters;
+   short corrective moves follow after a pause until the pointer is on target.
+3. **Minimum-jerk velocity.** Each move speeds up smoothly and slows to a stop.
+4. **Curved paths.** Paths bow to one side (`pointer_curvature`).
+5. **Click scatter.** Aim points spread around the centre with SD = W/4.133,
+   the "effective width" convention from Fitts's law research (`pointer_spread`).
+6. **Tremor** (`pointer_tremor_px`). A 4-8 Hz wobble whose size varies,
+   and which continues while the button is held down. If the release lands off
+   the target, the app never sees a click. That is a WCAG 2.5.8 (Target Size)
+   failure, found the way a user runs into it.
+
+Moves are sent as one report per 8 ms (a 125 Hz mouse), so the page gets a
+normal stream of `mousemove`, `mousedown` and `mouseup` events.
+
 ## How it works (read the code in this order)
 
 | File | Concept |
@@ -112,7 +151,8 @@ Custom profiles go in JSON or YAML; see [`profiles/example.yaml`](profiles/examp
 | [`profiles.py`](humanized_input/profiles.py) | What makes users different: typing speed, speech rate, how much they listen before skipping, reaction/think time, navigation strategy. |
 | [`timing.py`](humanized_input/timing.py) | Log-normal keystroke intervals, typos on neighbouring keys with delayed noticing and backspacing, listening time from speech rate. A `VirtualClock` adds up time without waiting; `RealClock` really waits. |
 | [`ax.py`](humanized_input/ax.py) | Reads Chromium's **accessibility tree** over the DevTools Protocol. This is what screen readers actually consume, not the HTML. |
-| [`backends/`](humanized_input/backends/__init__.py) | The small interface (snapshot, focused, press) that lets the same user drive a browser ([`browser.py`](humanized_input/backends/browser.py)) or a Windows app ([`windows_uia.py`](humanized_input/backends/windows_uia.py): UI Automation to AXItems, [`win_input.py`](humanized_input/backends/win_input.py): SendInput keystrokes). |
+| [`pointer.py`](humanized_input/pointer.py) | Mouse movement: Fitts's law timing, minimum-jerk submovements, corrective moves, curved paths, click scatter, tremor. |
+| [`backends/`](humanized_input/backends/__init__.py) | The small interface (snapshot, focused, press) that lets the same user drive a browser ([`browser.py`](humanized_input/backends/browser.py)) or a Windows app ([`windows_uia.py`](humanized_input/backends/windows_uia.py): UI Automation to AXItems, [`win_input.py`](humanized_input/backends/win_input.py): SendInput keystrokes and mouse). |
 | [`desktop.py`](humanized_input/desktop.py) | Launch or attach to a Windows app by window title. |
 | [`screen_reader.py`](humanized_input/screen_reader.py) | A virtual screen reader: browse mode (virtual cursor, quick-nav keys H/F/B/K/D), focus mode (Tab), NVDA-style phrasing, live-region announcements, a transcript. |
 | [`user.py`](humanized_input/user.py) | The simulated user. Finds things only by what it hears, with fallback to line-by-line reading and "guessing from nearby text" like real users. |

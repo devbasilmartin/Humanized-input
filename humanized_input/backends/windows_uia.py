@@ -191,18 +191,19 @@ class WindowsUIABackend(Backend):
     reads_new_window_text = True
     kind = "desktop"
 
-    def __init__(self, window=None, keyboard=None, settle_s: float = 0.15):
+    def __init__(self, window=None, keyboard=None, settle_s: float = 0.15, mouse=None):
         """`window` is a uiautomation control for the app's main window. The
         backend always reads the current foreground window of that app, so it
         follows dialogs and message boxes the app opens."""
         import uiautomation as auto
 
-        from .win_input import SendInputKeyboard
+        from .win_input import SendInputKeyboard, SendInputMouse
 
         self.auto = auto
         self._uia_thread = auto.UIAutomationInitializerInThread()
         self.window = window
         self.keyboard = keyboard or SendInputKeyboard()
+        self.mouse = mouse or SendInputMouse()
         self.settle_s = settle_s
         self._controls: dict[object, object] = {}
 
@@ -248,12 +249,37 @@ class WindowsUIABackend(Backend):
         if ctrl is not None:
             _safe(ctrl.SetFocus)
 
-    def press(self, key: str, hold: float = 0.0) -> None:
+    def _ensure_front(self) -> None:
         if self.window is not None:
             fg = _safe(self.auto.GetForegroundControl)
             if fg is None or self._process_id(fg) != self._process_id(self.window):
-                self.bring_to_front()  # never type into some other app
+                self.bring_to_front()  # never type or click into some other app
+
+    def press(self, key: str, hold: float = 0.0) -> None:
+        self._ensure_front()
         self.keyboard.press(key, hold)
+
+    # --- mouse -----------------------------------------------------------
+
+    def bounds(self, item: AXItem):
+        from ..pointer import Rect
+
+        ctrl = self._controls.get(item.backend_id)
+        r = _safe(lambda: ctrl.BoundingRectangle) if ctrl is not None else None
+        if r is None or r.right <= r.left or r.bottom <= r.top:
+            return None
+        return Rect(r.left, r.top, r.right - r.left, r.bottom - r.top)
+
+    def mouse_position(self) -> tuple[float, float]:
+        return self.mouse.position()
+
+    def mouse_move(self, x: int, y: int) -> None:
+        self.mouse.move(x, y)
+
+    def mouse_button(self, button: str, down: bool) -> None:
+        if down:
+            self._ensure_front()
+        self.mouse.button(button, down)
 
     def settle(self) -> None:
         time.sleep(self.settle_s)

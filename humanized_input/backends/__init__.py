@@ -7,6 +7,10 @@ user does:
 - What has keyboard focus? (`focused`)
 - Press a key. (`press`)
 
+Backends that support a mouse also implement `bounds`, `mouse_position`,
+`mouse_move` and `mouse_button`; the pointer model in pointer.py decides
+where and when to call them.
+
 Available backends:
 
 - BrowserBackend (browser.py): a web page in Chromium via Playwright.
@@ -45,6 +49,23 @@ class Backend:
 
     def settle(self) -> None:
         """Wait briefly for the app to react to input."""
+
+    # --- mouse (optional) --------------------------------------------------
+
+    def bounds(self, item: AXItem):
+        """The item's on-screen Rect (see pointer.py), or None if it has none."""
+        raise NotImplementedError
+
+    def mouse_position(self) -> tuple[float, float]:
+        raise NotImplementedError
+
+    def mouse_move(self, x: int, y: int) -> None:
+        """Move the pointer to (x, y) in one step; pointer.py plans the path."""
+        raise NotImplementedError
+
+    def mouse_button(self, button: str, down: bool) -> None:
+        """Press (down=True) or release a mouse button: "left", "right", "middle"."""
+        raise NotImplementedError
 
 
 def __getattr__(name):

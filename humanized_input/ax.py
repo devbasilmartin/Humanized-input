@@ -160,3 +160,14 @@ class AXReader:
 
     def focus(self, backend_id: int) -> None:
         self.cdp.send("DOM.focus", {"backendNodeId": backend_id})
+
+    def box(self, backend_id: int) -> tuple[float, float, float, float] | None:
+        """(x, y, width, height) of the element's border box in viewport
+        pixels, scrolling it into view first like a person would."""
+        try:
+            self.cdp.send("DOM.scrollIntoViewIfNeeded", {"backendNodeId": backend_id})
+            quad = self.cdp.send("DOM.getBoxModel", {"backendNodeId": backend_id})["model"]["border"]
+        except Exception:
+            return None  # no layout box (display: none, or not an element)
+        xs, ys = quad[0::2], quad[1::2]
+        return min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys)
