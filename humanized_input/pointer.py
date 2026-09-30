@@ -204,12 +204,12 @@ class PointerPlanner:
             pos = (round(rest[0]), round(rest[1]))
             if not events or (events[-1].x, events[-1].y) != pos:
                 events.append(PointerEvent("move", *pos, 1 / POLL_HZ))
-        settle = self.human._lognormal(0.12, 0.3)  # verify the pointer is on target
+        settle = self.human._lognormal(self.profile.pointer_settle_s, 0.3)  # check it is on target
         for c in range(clicks):
             gap = settle if c == 0 else self.human._lognormal(0.13, 0.25)  # double-click gap
             self._t += gap
             events.append(PointerEvent("down", *pos, gap, button))
-            hold = self.human.key_hold()
+            hold = min(self.human._lognormal(self.profile.pointer_hold_s, 0.25), 4 * self.profile.pointer_hold_s)
             pos, drift = self._hold_drift(rest, pos, hold)
             events += drift
             events.append(PointerEvent("up", *pos, hold - sum(e.delay_before for e in drift), button))

@@ -15,7 +15,8 @@ Every field maps to something you can observe in real screen reader users:
   pointer_a_s / pointer_b_s are the Fitts's law constants (seconds, and
   seconds per bit of difficulty); pointer_spread scales how widely clicks
   scatter; pointer_curvature how much paths bow; pointer_tremor_px the
-  amplitude of hand tremor. Most blind users do not use a mouse at all;
+  amplitude of hand tremor; pointer_settle_s the pause on the target before
+  pressing and pointer_hold_s how long the button stays down. Most blind users do not use a mouse at all;
   these matter for low-vision, motor-impaired and sighted keyboard+mouse users.
 """
 
@@ -46,6 +47,8 @@ class Profile:
     pointer_spread: float = 1.0
     pointer_curvature: float = 0.08
     pointer_tremor_px: float = 0.0
+    pointer_settle_s: float = 0.12
+    pointer_hold_s: float = 0.095
     max_steps: int = 80
     seed: int | None = None
     notes: list[str] = field(default_factory=list)
@@ -66,6 +69,8 @@ class Profile:
             raise ValueError("pointer_a_s must be >= 0 and pointer_b_s > 0")
         if self.pointer_spread < 0 or self.pointer_tremor_px < 0:
             raise ValueError("pointer_spread and pointer_tremor_px must be >= 0")
+        if self.pointer_settle_s <= 0 or self.pointer_hold_s <= 0:
+            raise ValueError("pointer_settle_s and pointer_hold_s must be > 0")
 
     def with_seed(self, seed: int) -> "Profile":
         return replace(self, seed=seed)

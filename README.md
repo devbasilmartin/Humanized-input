@@ -76,6 +76,22 @@ have NVDA speak our transcript in its own voice, use `--nvda path\to\nvdaControl
 the lock screen cannot be driven at all. Tk apps expose very little to UI
 Automation; WinForms, WPF, WinUI, Qt and Chromium/Electron apps expose a lot.
 
+### Fitting a profile to your own mouse
+
+1. Open [`examples/pointer_recorder.html`](examples/pointer_recorder.html) and do
+   the three-minute task: click highlighted squares around rings of three sizes
+   and three distances. Download the JSON at the end. More rounds fit better.
+2. `python examples/fit_my_pointer.py pointer-recording.json --save profiles/me.yaml`
+
+[`fit.py`](humanized_input/fit.py) measures the recording (Fitts's law
+intercept and slope, click scatter, path bow, pause before pressing, hold
+time, drift while held). It then tunes the pointer fields until the
+simulated user, clicking the same targets from the same start points,
+produces the same numbers. The report also lists measures that are not
+fitted, such as where in the movement the speed peaks and how many
+corrective submovements there are, so you can see where the model differs
+from a real hand.
+
 ## Many users, and users who change
 
 The built-in profiles are averages. [`population.py`](humanized_input/population.py)
@@ -188,6 +204,7 @@ normal stream of `mousemove`, `mousedown` and `mouseup` events.
 | [`timing.py`](humanized_input/timing.py) | Log-normal keystroke intervals, typos on neighbouring keys with delayed noticing and backspacing, listening time from speech rate. A `VirtualClock` adds up time without waiting; `RealClock` really waits. |
 | [`ax.py`](humanized_input/ax.py) | Reads Chromium's **accessibility tree** over the DevTools Protocol. This is what screen readers actually consume, not the HTML. |
 | [`pointer.py`](humanized_input/pointer.py) | Mouse movement: Fitts's law timing, minimum-jerk submovements, corrective moves, curved paths, click scatter, tremor. |
+| [`fit.py`](humanized_input/fit.py) | Measure recorded clicks and fit a profile's pointer fields to them by simulation. |
 | [`population.py`](humanized_input/population.py) | Speed-accuracy trade-off, a population of different users, practice and fatigue. |
 | [`backends/`](humanized_input/backends/__init__.py) | The small interface (snapshot, focused, press) that lets the same user drive a browser ([`browser.py`](humanized_input/backends/browser.py)) or a Windows app ([`windows_uia.py`](humanized_input/backends/windows_uia.py): UI Automation to AXItems, [`win_input.py`](humanized_input/backends/win_input.py): SendInput keystrokes and mouse). |
 | [`desktop.py`](humanized_input/desktop.py) | Launch or attach to a Windows app by window title. |

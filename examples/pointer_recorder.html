@@ -1,0 +1,252 @@
+<title>Pointer Recorder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one instrument panel. A header strip with status readouts, then a
+   full-height arena where the ISO 9241-9 style ring of targets appears. */
+:root {
+  --bg: #f3f5f4; --panel: #ffffff; --ink: #17201f; --muted: #5b6765;
+  --line: #d3dbd9; --accent: #0e6f6d; --target: #d9822b; --miss: #b3261e; --ok: #2f7d32;
+  --font-body: "Atkinson Hyperlegible", system-ui, sans-serif;
+  --font-data: "JetBrains Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #111615; --panel: #182020; --ink: #e4ecea; --muted: #97a5a2;
+  --line: #2e3a38; --accent: #4fb8b4; --target: #f0a04b; --miss: #f2786f; --ok: #7cc47f; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #111615; --panel: #182020; --ink: #e4ecea; --muted: #97a5a2;
+  --line: #2e3a38; --accent: #4fb8b4; --target: #f0a04b; --miss: #f2786f; --ok: #7cc47f; color-scheme: dark }
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--ink); font: 16px/1.5 var(--font-body);
+  display: flex; flex-direction: column; padding-inline: 16px; box-sizing: border-box; }
+header { display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: baseline; padding-block: 14px 10px; }
+h1 { font-size: 1.25rem; margin: 0; text-wrap: balance; }
+.readouts { display: flex; flex-wrap: wrap; gap: 6px 20px; font: 13px var(--font-data); color: var(--muted);
+  font-variant-numeric: tabular-nums; }
+.readouts b { color: var(--ink); font-weight: 600; }
+#arena { position: relative; flex: 1; min-height: 320px; margin-bottom: 16px; border: 1px solid var(--line);
+  border-radius: 6px; background: var(--panel); overflow: hidden; touch-action: none; user-select: none;
+  -webkit-user-select: none; }
+.sq { position: absolute; box-sizing: border-box; border: 1.5px solid var(--line); }
+.sq.next { background: var(--target); border-color: var(--target); }
+.sq.start { background: var(--accent); border-color: var(--accent); }
+.panel { position: absolute; inset: 0; display: grid; place-items: center; padding: 16px; overflow: auto; }
+.card { max-width: 34rem; display: grid; gap: 14px; }
+.card h2 { margin: 0; font-size: 1.15rem; }
+.card p { margin: 0; color: var(--muted); }
+.card ol { margin: 0; padding-left: 1.2rem; color: var(--muted); display: grid; gap: 4px; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+fieldset { border: 0; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 14px; }
+legend { font-weight: 700; margin-bottom: 6px; }
+button { font: 700 15px var(--font-body); padding: 10px 18px; border-radius: 6px; cursor: pointer;
+  border: 1.5px solid var(--accent); background: var(--accent); color: var(--panel); }
+button.secondary { background: transparent; color: var(--accent); }
+button:focus-visible, input:focus-visible { outline: 3px solid var(--target); outline-offset: 2px; }
+.note { font-size: 13px; color: var(--muted); }
+.status { font: 13px var(--font-data); }
+.status.bad { color: var(--miss); } .status.good { color: var(--ok); }
+table { border-collapse: collapse; font: 13px var(--font-data); font-variant-numeric: tabular-nums; }
+td, th { padding: 3px 14px 3px 0; text-align: left; } th { color: var(--muted); font-weight: 400; }
+.flash { position: absolute; font: 12px var(--font-data); color: var(--miss); pointer-events: none; }
+@media (prefers-reduced-motion: no-preference) { .sq.next { transition: background .08s; } }
+</style>
+
+<header>
+  <h1>Pointer Recorder</h1>
+  <div class="readouts" aria-live="polite">
+    <span>block <b id="r-block">–</b>/9</span>
+    <span>target <b id="r-size">–</b></span>
+    <span>clicks <b id="r-clicks">0</b></span>
+    <span>misses <b id="r-miss">0</b></span>
+    <span>saved <b id="r-saved">0</b> blocks</span>
+  </div>
+</header>
+
+<div id="arena">
+  <div class="panel" id="intro">
+    <div class="card">
+      <h2>Record how you point and click</h2>
+      <p>Nine short blocks, about three minutes in total. Each block shows a ring of squares. Click the
+        highlighted one, then the next one that lights up, across the ring.</p>
+      <ol>
+        <li>Work at your normal pace: quick, but don't rush.</li>
+        <li>Use the device you normally use. A phone or touchscreen won't work, because it has no pointer path.</li>
+        <li>If you miss, carry on. Misses are part of the data.</li>
+      </ol>
+      <fieldset>
+        <legend>What are you using?</legend>
+        <label><input type="radio" name="device" id="dev-mouse" value="mouse" checked> Mouse</label>
+        <label><input type="radio" name="device" id="dev-trackpad" value="trackpad"> Trackpad</label>
+        <label><input type="radio" name="device" id="dev-other" value="other"> Other</label>
+      </fieldset>
+      <div class="row"><button id="go">Start recording</button></div>
+      <p class="note" id="storage-note">The recording is saved to this page's private storage, readable only by you.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+const W_LIST = [12, 24, 48], D_LIST = [150, 300, 500], N = 9;
+const $ = id => document.getElementById(id);
+const arena = $("arena");
+let db = null, session = null, device = "mouse", blocks = [], bi = -1;
+let squares = [], order = [], k = 0, block = null, trial = null, lastUp = null, pressed = null;
+let totals = { clicks: 0, miss: 0, saved: 0 }, allBlocks = [];
+
+(async () => {
+  try { db = await window.claude?.use("db"); } catch { db = null; }
+  if (!db) $("storage-note").textContent = "Storage isn't available in this view. You can still download the recording at the end.";
+})();
+
+function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+const r1 = v => Math.round(v * 10) / 10;
+
+function readouts() {
+  $("r-block").textContent = bi >= 0 && bi < blocks.length ? bi + 1 : "–";
+  $("r-size").textContent = block ? `${block.W}px, ${Math.round(block.D)}px apart` : "–";
+  $("r-clicks").textContent = totals.clicks; $("r-miss").textContent = totals.miss;
+  $("r-saved").textContent = totals.saved;
+}
+
+function clearArena() { arena.querySelectorAll(".sq,.panel,.flash").forEach(el => el.remove()); }
+
+function startSession() {
+  device = document.querySelector("input[name=device]:checked").value;
+  session = new Date().toISOString().replace(/[:.]/g, "-");
+  blocks = shuffle(W_LIST.flatMap(W => D_LIST.map(D => ({ W, D }))));
+  allBlocks = []; totals = { clicks: 0, miss: 0, saved: 0 }; bi = -1;
+  nextBlock();
+}
+
+function nextBlock() {
+  bi++;
+  if (bi >= blocks.length) return finish();
+  const { W, D } = blocks[bi];
+  const box = arena.getBoundingClientRect();
+  const Dfit = Math.min(D, Math.min(box.width, box.height) - W - 40);  // keep the ring on screen
+  block = { session, block: bi, W, D: Dfit, device, dpr: window.devicePixelRatio,
+            arena: [Math.round(box.width), Math.round(box.height)], trials: [] };
+  clearArena();
+  const cx = box.width / 2, cy = box.height / 2;
+  squares = Array.from({ length: N }, (_, i) => {
+    const a = 2 * Math.PI * i / N - Math.PI / 2;
+    const x = cx + Dfit / 2 * Math.cos(a) - W / 2, y = cy + Dfit / 2 * Math.sin(a) - W / 2;
+    const el = document.createElement("div");
+    el.className = "sq"; Object.assign(el.style, { left: x + "px", top: y + "px", width: W + "px", height: W + "px" });
+    arena.appendChild(el);
+    return { el, rect: [r1(x), r1(y), W, W] };
+  });
+  order = Array.from({ length: N + 1 }, (_, i) => (i * 5) % N);  // alternate across the ring
+  k = 0; lastUp = null; trial = null;
+  squares[order[0]].el.classList.add("start");
+  readouts();
+}
+
+function local(e) { const b = arena.getBoundingClientRect(); return [r1(e.clientX - b.left), r1(e.clientY - b.top)]; }
+function inside(rect, [x, y]) { return x >= rect[0] && x < rect[0] + rect[2] && y >= rect[1] && y < rect[1] + rect[3]; }
+
+arena.addEventListener("pointermove", e => {
+  if (!trial || e.pointerType === "touch") return;
+  const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+  for (const ev of (evs.length ? evs : [e])) {
+    const [x, y] = local(ev);
+    trial.moves.push([r1(ev.timeStamp - trial.t0), x, y]);
+  }
+});
+
+arena.addEventListener("pointerdown", e => {
+  if (!block || e.button !== 0) return;
+  if (e.pointerType === "touch") { flash(local(e), "needs a mouse or trackpad"); return; }
+  e.preventDefault();
+  pressed = { t: e.timeStamp, xy: local(e) };
+  if (trial) trial.down = [r1(e.timeStamp - trial.t0), ...pressed.xy];
+});
+
+arena.addEventListener("pointerup", e => {
+  if (!block || !pressed || e.button !== 0) return;
+  const xy = local(e);
+  const current = squares[order[k]];
+  if (trial) {
+    trial.up = [r1(e.timeStamp - trial.t0), ...xy];
+    const hit = inside(current.rect, trial.down.slice(1)) && inside(current.rect, xy);
+    block.trials.push({ start: trial.start, target: current.rect, moves: trial.moves, down: trial.down, up: trial.up });
+    totals.clicks++; if (!hit) { totals.miss++; flash(xy, "miss"); }
+  } else if (!inside(current.rect, xy)) {
+    pressed = null; return;  // the first click of a block must land on the start square
+  }
+  pressed = null;
+  current.el.classList.remove("start", "next");
+  k++;
+  if (k >= order.length) { saveBlock(block); return nextBlock(); }
+  squares[order[k]].el.classList.add("next");
+  trial = { t0: e.timeStamp, start: xy, moves: [], down: null };
+  readouts();
+});
+
+function flash([x, y], text) {
+  const el = document.createElement("div");
+  el.className = "flash"; el.textContent = text;
+  Object.assign(el.style, { left: x + 8 + "px", top: y + 8 + "px" });
+  arena.appendChild(el); setTimeout(() => el.remove(), 700);
+}
+
+async function saveBlock(b) {
+  allBlocks.push(b);
+  if (!db) return;
+  // One document per click: a fast gaming mouse can report 1000 times a
+  // second, and a whole block could outgrow a single document.
+  const { trials, ...meta } = b;
+  try {
+    for (let i = 0; i < trials.length; i++) {
+      await db.collection("recordings").doc(`${b.session}-b${b.block}-t${i}`).set({ ...meta, trial: i, ...trials[i] });
+    }
+    totals.saved++; readouts();
+  } catch (err) {
+    console.warn("save failed", err);
+  }
+  const s = $("save-status");
+  if (s && bi >= blocks.length) s.textContent = `${totals.saved} of ${allBlocks.length} blocks saved.`;
+}
+
+function finish() {
+  clearArena(); block = null; readouts();
+  const trials = allBlocks.flatMap(b => b.trials.map(t => ({ ...t, W: b.W })));
+  const hits = trials.filter(t => inside(t.target, t.down.slice(1)) && inside(t.target, t.up.slice(1)));
+  const mt = hits.map(t => t.down[0]);
+  const mean = a => a.reduce((s, v) => s + v, 0) / (a.length || 1);
+  const byW = W_LIST.map(W => {
+    const ts = trials.filter(t => t.W === W);
+    const h = ts.filter(t => hits.includes(t));
+    return `<tr><td>${W}px</td><td>${Math.round(mean(h.map(t => t.down[0])))} ms</td><td>${Math.round(100 * (1 - h.length / (ts.length || 1)))}%</td></tr>`;
+  }).join("");
+  const panel = document.createElement("div");
+  panel.className = "panel";
+  panel.innerHTML = `<div class="card">
+      <h2>Recording finished</h2>
+      <p>${trials.length} clicks, ${totals.miss} missed. Average time from one click to the next: ${Math.round(mean(mt))} ms.</p>
+      <table><thead><tr><th>target</th><th>click to click</th><th>missed</th></tr></thead><tbody>${byW}</tbody></table>
+      <p class="status ${db ? (totals.saved === allBlocks.length ? "good" : "bad") : ""}" id="save-status">${
+        db ? (totals.saved === allBlocks.length ? `All ${totals.saved} blocks saved. Tell Claude you're done.`
+                                                 : `${totals.saved} of ${allBlocks.length} blocks saved. Download the file as a backup.`)
+           : "Not saved here. Download the file and give it to Claude."}</p>
+      <div class="row"><button id="again">Record another round</button><button class="secondary" id="dl">Download JSON</button></div>
+      <p class="note">More rounds give a closer fit.</p></div>`;
+  arena.appendChild(panel);
+  $("again").onclick = startSession;
+  $("dl").onclick = download;
+}
+
+async function download() {
+  const data = JSON.stringify({ blocks: allBlocks });
+  let dl = null;
+  try { dl = await window.claude?.use("downloads"); } catch { dl = null; }
+  if (!dl) {
+    const s = $("save-status"); if (s) { s.textContent = "Download isn't available in this view."; s.className = "status bad"; }
+    return;
+  }
+  try { await dl.save({ filename: `pointer-recording-${session}.json`, data }); }
+  catch (err) { console.warn("download not saved", err); }  // the viewer declined, or the host refused
+}
+
+$("go").onclick = startSession;
+</script>
