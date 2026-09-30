@@ -12,6 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from .ax import FORM_FIELD_ROLES, AXItem
+from .backends import Backend
 from .profiles import Profile
 from .screen_reader import VirtualScreenReader, describe
 from .timing import Clock, Humanizer, VirtualClock
@@ -19,7 +20,7 @@ from .timing import Clock, Humanizer, VirtualClock
 # Which quick-nav key an expert would press to look for each kind of thing.
 _QUICKNAV_KEY = {"field": "f", "button": "b", "link": "k", "heading": "h"}
 _KIND_ROLES = {
-    "field": FORM_FIELD_ROLES,
+    "field": FORM_FIELD_ROLES | {"document"},  # document: e.g. Notepad's text area
     "button": {"button"},
     "link": {"link"},
     "heading": {"heading"},
@@ -56,12 +57,18 @@ class SessionReport:
 
 
 class SimulatedUser:
-    def __init__(self, page, profile: Profile, speech=None, clock: Clock | None = None):
-        self.page = page
+    def __init__(self, backend: Backend, profile: Profile, speech=None, clock: Clock | None = None):
+        """`backend` is a Backend (browser or Windows desktop). A Playwright
+        page is also accepted and wrapped in a BrowserBackend."""
+        if not isinstance(backend, Backend):
+            from .backends.browser import BrowserBackend
+
+            backend = BrowserBackend(backend)
+        self.backend = backend
         self.profile = profile
         self.clock = clock or VirtualClock()
         self.human = Humanizer(profile)
-        self.sr = VirtualScreenReader(page, speech=speech, clock=self.clock)
+        self.sr = VirtualScreenReader(backend, speech=speech, clock=self.clock)
         self.report = SessionReport(profile=profile.name)
 
     # --- low-level human actions ---------------------------------------
@@ -75,17 +82,18 @@ class SimulatedUser:
 
     def _press(self, key: str) -> None:
         self.sr.note(f"presses {key}")
-        self.page.keyboard.press(key)
+        self.backend.press(key, self.human.key_hold())
 
     def _after_page_change(self) -> None:
-        try:
-            self.page.wait_for_load_state("domcontentloaded", timeout=5000)
-        except Exception:
-            pass
+        self.backend.settle()
         old_title = self.sr.title
         self.sr.refresh()
         if self.sr.title != old_title:
-            self.sr.read_title()
+            if self.backend.reads_new_window_text:
+                for text in self.sr.read_window():
+                    self._listen(text, interesting=True)
+            else:
+                self.sr.read_title()
         for text in self.sr.announce_live_changes():
             self._listen(text, interesting=True)
 
@@ -106,6 +114,8 @@ class SimulatedUser:
         line by line from the top, like real users do.
         """
         strategy = self.profile.navigation
+        if strategy == "quicknav" and not self.backend.browse_mode:
+            strategy = "tab"  # desktop apps have no quick-nav keys; experts Tab
         item, steps, note = self._search(name, kind, strategy, self.profile.max_steps)
         if item is None and strategy != "linear":
             self.sr.note("falls back to reading line by line from the top")
@@ -171,13 +181,28 @@ class SimulatedUser:
 
     # --- goals (what a test script calls) ------------------------------
 
+    def _type_text(self, text: str) -> None:
+        self.sr.note(f"types {text!r}")
+        for stroke in self.human.plan_typing(text):
+            self.clock.sleep(stroke.delay_before)
+            self.backend.press(stroke.key, self.human.key_hold())
+
     def fill(self, name: str, text: str) -> bool:
-        def type_it(_item):
-            self.sr.note(f"types {text!r}")
-            for stroke in self.human.plan_typing(text):
-                self.clock.sleep(stroke.delay_before)
-                self.page.keyboard.press(stroke.key)
-        return self._goal(f"fill {name!r}", name, "field", type_it)
+        return self._goal(f"fill {name!r}", name, "field", lambda _i: self._type_text(text))
+
+    def type(self, text: str) -> None:
+        """Type into whatever has focus now, without looking for anything."""
+        self._think()
+        self._type_text(text)
+        self.report.elapsed = self.clock.elapsed
+
+    def shortcut(self, keys: str) -> None:
+        """Press a key or combination, e.g. "Control+s", "Alt+F4", "Escape",
+        then listen to whatever changed (a dialog opening, say)."""
+        self._think()
+        self._press(keys)
+        self._after_page_change()
+        self.report.elapsed = self.clock.elapsed
 
     def check(self, name: str) -> bool:
         return self._goal(f"check {name!r}", name, "field", lambda _i: self._press("Space"))

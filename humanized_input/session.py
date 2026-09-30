@@ -9,6 +9,7 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 from .profiles import Profile, load_profile
+from .backends.browser import BrowserBackend
 from .user import SimulatedUser
 
 
@@ -30,6 +31,6 @@ def user_session(url: str, profile: Profile | str, speech=None, clock=None, head
         try:
             page = browser.new_page()
             page.goto(url)
-            yield SimulatedUser(page, profile, speech=speech, clock=clock)
+            yield SimulatedUser(BrowserBackend(page), profile, speech=speech, clock=clock)
         finally:
             browser.close()

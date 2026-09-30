@@ -42,7 +42,7 @@ def test_typed_text_lands_in_the_field_despite_typos():
     sloppy = BUILTIN_PROFILES["novice"].with_seed(3)
     with _session(sloppy) as user:
         user.fill("Email", "someone.long.address@example.org")
-        assert user.page.input_value("#email") == "someone.long.address@example.org"
+        assert user.backend.page.input_value("#email") == "someone.long.address@example.org"
 
 
 def test_validation_errors_are_announced_like_a_live_region():

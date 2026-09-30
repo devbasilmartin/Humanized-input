@@ -88,6 +88,10 @@ class Humanizer:
             interval *= 1.5  # people pause slightly at word boundaries
         return interval
 
+    def key_hold(self) -> float:
+        """How long a key stays pressed (dwell time), typically 70-130 ms."""
+        return min(self._lognormal(0.095, 0.25), 0.4)
+
     def reaction(self) -> float:
         return self._lognormal(self.profile.reaction_s, 0.3)
 

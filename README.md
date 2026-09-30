@@ -1,7 +1,7 @@
 # Humanized Input
 
-A study project for writing Python scripts that **use web pages the way screen
-reader users do**: they navigate only by what they hear, they follow a
+A study project for writing Python scripts that **use web pages and Windows
+desktop apps the way screen reader users do**: they navigate only by what they hear, they follow a
 **profile** (expert, novice, motor-impaired...), and they type and pause with
 **human-like timing**.
 
@@ -25,7 +25,58 @@ Accessibility issues on the page:
   - [unnamed-control] A button has no accessible name.  (heard as: "button")
 ```
 
-## Setup
+## Windows desktop apps
+
+The same profiles, virtual screen reader and simulated user also drive real
+Windows programs. On Windows the project reads **UI Automation** (the
+accessibility API Narrator uses, and NVDA/JAWS use for modern apps) and
+sends **real keystrokes** through `SendInput`, held down and spaced out like a
+person's.
+
+```powershell
+pip install -r requirements.txt          # installs uiautomation on Windows
+python examples\windows\signup_demo.py --speak                  # WinForms sign-up app, every profile
+python examples\windows\notepad_demo.py --profile novice        # human typing in Notepad, a dialog announced
+python examples\windows\explore_window.py --title "Calculator" --tab 10
+```
+
+Leave the keyboard alone while a script runs; the key presses are real. The
+backend only types into the target app and pulls it back to the front if
+focus wanders.
+
+```python
+from humanized_input import PrintSpeech
+from humanized_input.desktop import desktop_session
+
+with desktop_session("novice", title=r".*Notepad$", launch=["notepad.exe"], speech=PrintSpeech()) as user:
+    user.type("Hello from a simulated user.")
+    user.shortcut("Control+Shift+s")   # "Save As, dialog ..." gets read out
+    user.shortcut("Escape")
+```
+
+Differences from the browser:
+
+- Desktop apps have no browse mode, so there are no H/F/B quick-nav keys.
+  The "expert" profile Tabs instead, and the virtual cursor acts like NVDA's
+  object navigation for users who read line by line.
+- When a window or dialog opens, its title and text are read, like a
+  message box.
+- The audit skips web-only rules (headings, landmarks) and adds "can this
+  control be reached with the keyboard?".
+
+**Using the real NVDA.** Start NVDA before running a desktop script. Because
+the keystrokes are real, NVDA announces everything just as it would for a
+person. Open *NVDA menu → Tools → Speech viewer* to compare what NVDA says with
+our transcript; the differences are a good way to learn how NVDA works. To
+have NVDA speak our transcript in its own voice, use `--nvda path\to\nvdaControllerClient.dll`
+(see [`nvda.py`](humanized_input/nvda.py)).
+
+**Limits.** Windows blocks a normal process from sending keys to an admin
+(elevated) window, so run Python as admin to test admin apps. UAC prompts and
+the lock screen cannot be driven at all. Tk apps expose very little to UI
+Automation; WinForms, WPF, WinUI, Qt and Chromium/Electron apps expose a lot.
+
+## Setup (browser)
 
 ```bash
 pip install -r requirements.txt
@@ -61,6 +112,8 @@ Custom profiles go in JSON or YAML; see [`profiles/example.yaml`](profiles/examp
 | [`profiles.py`](humanized_input/profiles.py) | What makes users different: typing speed, speech rate, how much they listen before skipping, reaction/think time, navigation strategy. |
 | [`timing.py`](humanized_input/timing.py) | Log-normal keystroke intervals, typos on neighbouring keys with delayed noticing and backspacing, listening time from speech rate. A `VirtualClock` adds up time without waiting; `RealClock` really waits. |
 | [`ax.py`](humanized_input/ax.py) | Reads Chromium's **accessibility tree** over the DevTools Protocol. This is what screen readers actually consume, not the HTML. |
+| [`backends/`](humanized_input/backends/__init__.py) | The small interface (snapshot, focused, press) that lets the same user drive a browser ([`browser.py`](humanized_input/backends/browser.py)) or a Windows app ([`windows_uia.py`](humanized_input/backends/windows_uia.py): UI Automation to AXItems, [`win_input.py`](humanized_input/backends/win_input.py): SendInput keystrokes). |
+| [`desktop.py`](humanized_input/desktop.py) | Launch or attach to a Windows app by window title. |
 | [`screen_reader.py`](humanized_input/screen_reader.py) | A virtual screen reader: browse mode (virtual cursor, quick-nav keys H/F/B/K/D), focus mode (Tab), NVDA-style phrasing, live-region announcements, a transcript. |
 | [`user.py`](humanized_input/user.py) | The simulated user. Finds things only by what it hears, with fallback to line-by-line reading and "guessing from nearby text" like real users. |
 | [`audit.py`](humanized_input/audit.py) | Simple checks tied to what the user heard. |
@@ -95,8 +148,9 @@ repeatably. When you want to go further:
 - **Orca (Linux):** Orca and every Linux app expose the AT-SPI tree; read it with
   `pyatspi` / `gi.repository.Atspi`. Speech goes through speech-dispatcher
   (`SpeechDispatcherSpeech` in `screen_reader.py` uses it).
-- **Windows desktop apps:** `pywinauto` with the UIA backend or `comtypes` +
-  UI Automation gives you the same role/name/state tree for native apps.
+- **Windows desktop apps:** built in (see above). To explore UI Automation by
+  hand, use Microsoft's *Accessibility Insights for Windows* or *Inspect.exe*
+  (Windows SDK); they show the same tree `windows_uia.py` reads.
 - **macOS:** VoiceOver can be driven with AppleScript; the AX API is reachable
   through `pyobjc`.
 - Real text-to-speech for the virtual reader: `Pyttsx3Speech` in
