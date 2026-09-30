@@ -2,6 +2,7 @@
 
 from .audit import Issue, audit
 from .pointer import PointerPlanner, Rect
+from .population import emphasize, fatigued, individual, practiced, sample_population
 from .profiles import BUILTIN_PROFILES, Profile, load_profile
 from .screen_reader import PrintSpeech, Speech, VirtualScreenReader, describe
 from .timing import Humanizer, RealClock, VirtualClock
@@ -12,5 +13,6 @@ __all__ = [
     "BUILTIN_PROFILES", "Backend", "Humanizer", "Issue", "PointerPlanner", "PrintSpeech", "Profile",
     "RealClock", "Rect",
     "SessionReport", "SimulatedUser", "Speech", "VirtualClock", "VirtualScreenReader",
-    "audit", "describe", "load_profile",
+    "audit", "describe", "emphasize", "fatigued", "individual", "load_profile", "practiced",
+    "sample_population",
 ]

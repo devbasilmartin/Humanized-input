@@ -76,6 +76,42 @@ have NVDA speak our transcript in its own voice, use `--nvda path\to\nvdaControl
 the lock screen cannot be driven at all. Tk apps expose very little to UI
 Automation; WinForms, WPF, WinUI, Qt and Chromium/Electron apps expose a lot.
 
+## Many users, and users who change
+
+The built-in profiles are averages. [`population.py`](humanized_input/population.py)
+turns them into many different users, each a normal `Profile`:
+
+```python
+from humanized_input.population import emphasize, fatigued, practiced, sample_population
+
+emphasize(profile, +1)      # rushing: ~0.76x the time, ~1.7x the errors
+emphasize(profile, -1)      # careful: ~1.3x the time, ~0.6x the errors
+sample_population(40, {"expert": 1, "novice": 3}, seed=1)   # 40 different people
+practiced(novice, sessions=10)   # the same novice on their 10th visit
+fatigued(motor, minutes=90)      # slower, more errors, bigger tremor
+```
+
+- **Speed-accuracy trade-off.** One person can rush or take care; both move
+  along the same curve.
+- **Individual differences.** Each trait varies about ±15% on a log scale, and
+  speed traits share a "general speed" factor, so fast typists also tend to
+  point and decide quickly.
+- **Practice** follows the power law of practice: big gains on early visits,
+  then a plateau. Good for learnability questions ("after how many visits
+  does a novice finish sign-up in under a minute?").
+- **Fatigue** adds time, errors and tremor as a session goes on.
+
+```
+$ python examples/population.py --users 20
+base profile   users  success  median s  slowest s
+expert             6     100%      12.0       13.9
+novice             2     100%      73.6       79.6
+...
+Novice learning curve (power law of practice):
+  visit  1:   66.8s
+  visit 10:   48.3s
+```
+
 ## Setup (browser)
 
 ```bash
@@ -152,6 +188,7 @@ normal stream of `mousemove`, `mousedown` and `mouseup` events.
 | [`timing.py`](humanized_input/timing.py) | Log-normal keystroke intervals, typos on neighbouring keys with delayed noticing and backspacing, listening time from speech rate. A `VirtualClock` adds up time without waiting; `RealClock` really waits. |
 | [`ax.py`](humanized_input/ax.py) | Reads Chromium's **accessibility tree** over the DevTools Protocol. This is what screen readers actually consume, not the HTML. |
 | [`pointer.py`](humanized_input/pointer.py) | Mouse movement: Fitts's law timing, minimum-jerk submovements, corrective moves, curved paths, click scatter, tremor. |
+| [`population.py`](humanized_input/population.py) | Speed-accuracy trade-off, a population of different users, practice and fatigue. |
 | [`backends/`](humanized_input/backends/__init__.py) | The small interface (snapshot, focused, press) that lets the same user drive a browser ([`browser.py`](humanized_input/backends/browser.py)) or a Windows app ([`windows_uia.py`](humanized_input/backends/windows_uia.py): UI Automation to AXItems, [`win_input.py`](humanized_input/backends/win_input.py): SendInput keystrokes and mouse). |
 | [`desktop.py`](humanized_input/desktop.py) | Launch or attach to a Windows app by window title. |
 | [`screen_reader.py`](humanized_input/screen_reader.py) | A virtual screen reader: browse mode (virtual cursor, quick-nav keys H/F/B/K/D), focus mode (Tab), NVDA-style phrasing, live-region announcements, a transcript. |
