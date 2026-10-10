@@ -57,12 +57,17 @@ def test_execute_calls_your_functions():
 
 
 def test_bridge_round_trip(tmp_path):
+    styles = tmp_path / "styles.yaml"
+    styles.write_text("styles:\n"
+                      "  - {name: precise, path: instant, aim: deepest}\n"
+                      "  - {name: naive-centre, path: linear, aim: center}\n"
+                      "  - {name: human, path: human, aim: human, overrides: {pointer_spread: 0.5}}\n")
     log = tmp_path / "out.jsonl"
-    bridge = Bridge(load_styles("examples/mouse_styles.yaml"), str(log))
+    bridge = Bridge(load_styles(str(styles)), str(log))
     lines = []
-    for i in range(14):
+    for i in range(6):  # round-robin: each style gets clicks i and i + 3
         lines.append({"cmd": "click", "from": [0, 0], "polygon": [list(p) for p in L.points]})
-        lines.append({"cmd": "result", "id": i + 1, "ok": i != 2})
+        lines.append({"cmd": "result", "id": i + 1, "ok": i != 1})
     lines += [{"cmd": "summary"}, {"cmd": "nope"}]
     out = io.StringIO()
     bridge.serve(io.StringIO("\n".join(json.dumps(m) for m in lines)), out)
@@ -70,9 +75,14 @@ def test_bridge_round_trip(tmp_path):
     first = replies[0]
     assert first["style"] == "precise" and first["events"][-1]["type"] == "up"
     summary = replies[-2]["summary"]
-    assert len(summary) == 7 and all(r["clicks"] == 2 for r in summary)
+    assert len(summary) == 3 and all(r["clicks"] == 2 for r in summary)
     assert {r["style"]: r["rate"] for r in summary}["naive-centre"] == 0.5
     assert "error" in replies[-1]
     # The log carries over to the next session.
-    assert len(Bridge(load_styles("examples/mouse_styles.yaml"), str(log)).outcomes) == 14
+    assert len(Bridge(load_styles(str(styles)), str(log)).outcomes) == 6
     assert summarize([]) == []
+
+
+def test_example_styles_file_loads():
+    names = [s.name for s in load_styles("examples/mouse_styles.yaml")]
+    assert "skillbot-classic" in names and len(names) == len(set(names))
