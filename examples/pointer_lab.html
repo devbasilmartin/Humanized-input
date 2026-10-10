@@ -1,0 +1,342 @@
+<title>Pointer Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one instrument panel. A header strip with status readouts, then a
+   full-height arena where the ISO 9241-9 style ring of targets appears. */
+:root {
+  --bg: #f3f5f4; --panel: #ffffff; --ink: #17201f; --muted: #5b6765;
+  --line: #d3dbd9; --accent: #0e6f6d; --target: #d9822b; --miss: #b3261e; --ok: #2f7d32;
+  --font-body: "Atkinson Hyperlegible", system-ui, sans-serif;
+  --font-data: "JetBrains Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #111615; --panel: #182020; --ink: #e4ecea; --muted: #97a5a2;
+  --line: #2e3a38; --accent: #4fb8b4; --target: #f0a04b; --miss: #f2786f; --ok: #7cc47f; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #111615; --panel: #182020; --ink: #e4ecea; --muted: #97a5a2;
+  --line: #2e3a38; --accent: #4fb8b4; --target: #f0a04b; --miss: #f2786f; --ok: #7cc47f; color-scheme: dark }
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--ink); font: 16px/1.5 var(--font-body);
+  display: flex; flex-direction: column; padding-inline: 16px; box-sizing: border-box; }
+header { display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: baseline; padding-block: 14px 10px; }
+h1 { font-size: 1.25rem; margin: 0; text-wrap: balance; }
+.readouts { display: flex; flex-wrap: wrap; gap: 6px 20px; font: 13px var(--font-data); color: var(--muted);
+  font-variant-numeric: tabular-nums; }
+.readouts b { color: var(--ink); font-weight: 600; }
+#arena { position: relative; flex: 1; min-height: 320px; margin-bottom: 16px; border: 1px solid var(--line);
+  border-radius: 6px; background: var(--panel); overflow: hidden; touch-action: none; user-select: none;
+  -webkit-user-select: none; }
+.sq { position: absolute; box-sizing: border-box; border: 1.5px solid var(--line); }
+.sq.next { background: var(--target); border-color: var(--target); }
+.sq.start { background: var(--accent); border-color: var(--accent); }
+.panel { position: absolute; inset: 0; display: grid; place-items: center; padding: 16px; overflow: auto; }
+.card { max-width: 34rem; display: grid; gap: 14px; }
+.card h2 { margin: 0; font-size: 1.15rem; }
+.card p { margin: 0; color: var(--muted); }
+.card ol { margin: 0; padding-left: 1.2rem; color: var(--muted); display: grid; gap: 4px; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+fieldset { border: 0; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 14px; }
+legend { font-weight: 700; margin-bottom: 6px; }
+button { font: 700 15px var(--font-body); padding: 10px 18px; border-radius: 6px; cursor: pointer;
+  border: 1.5px solid var(--accent); background: var(--accent); color: var(--panel); }
+button.secondary { background: transparent; color: var(--accent); }
+button:focus-visible, input:focus-visible { outline: 3px solid var(--target); outline-offset: 2px; }
+.note { font-size: 13px; color: var(--muted); }
+.status { font: 13px var(--font-data); }
+.status.bad { color: var(--miss); } .status.good { color: var(--ok); }
+table { border-collapse: collapse; font: 13px var(--font-data); font-variant-numeric: tabular-nums; }
+td, th { padding: 3px 14px 3px 0; text-align: left; } th { color: var(--muted); font-weight: 400; }
+.shape { position:absolute; inset:0; pointer-events:none; }
+.flash { position: absolute; font: 12px var(--font-data); color: var(--miss); pointer-events: none; }
+@media (prefers-reduced-motion: no-preference) { .sq.next { transition: background .08s; } }
+</style>
+<header>
+  <h1>Pointer Lab</h1>
+  <div class="readouts" aria-live="polite">
+    <span>task <b id="r-task">–</b></span>
+    <span>trial <b id="r-trial">–</b></span>
+    <span>misses <b id="r-miss">0</b></span>
+    <span>saved <b id="r-saved">0</b></span>
+  </div>
+</header>
+
+<div id="arena">
+  <div class="panel" id="intro">
+    <div class="card">
+      <h2>Four more pointing tests</h2>
+      <p>These cover what the ring test can't: odd shapes, moving targets, reacting to something appearing, and
+        holding still. About four minutes in total.</p>
+      <ol>
+        <li><b>Shapes:</b> click the teal square, then click the orange shape wherever feels natural.</li>
+        <li><b>Moving:</b> click the teal square, then click the orange box as it slides past.</li>
+        <li><b>Reaction:</b> rest the pointer on the teal square without clicking. Click the orange square as soon as it appears.</li>
+        <li><b>Hold still:</b> rest the pointer in the circle for three seconds without clicking.</li>
+      </ol>
+      <p>Use the same mouse as last time, at your normal pace. If you miss, carry on.</p>
+      <fieldset>
+        <legend>What are you using?</legend>
+        <label><input type="radio" name="device" value="mouse" checked> Mouse</label>
+        <label><input type="radio" name="device" value="trackpad"> Trackpad</label>
+        <label><input type="radio" name="device" value="other"> Other</label>
+      </fieldset>
+      <div class="row"><button id="go">Start</button></div>
+      <p class="note" id="storage-note">Each trial is saved to this page's private storage, readable only by you.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+// Shapes in their own coordinates (polygons, even-odd rule; the ring is an outer and inner loop).
+const SHAPES = {
+  L: [[0,0],[12,0],[12,40],[50,40],[50,52],[0,52]],
+  ring: [[0,0],[60,0],[60,60],[0,60],[0,0],[12,12],[12,48],[48,48],[48,12],[12,12]],
+  bar: [[0,0],[8,0],[8,70],[0,70]],
+  triangle: [[0,50],[28,0],[56,50]],
+  T: [[0,0],[54,0],[54,12],[33,12],[33,54],[21,54],[21,12],[0,12]],
+};
+const SPEEDS = [60, 120, 240];
+const TASKS = [
+  { id: "shapes", title: "Shapes", n: 25, text: "Click the teal square, then click the orange shape wherever feels natural." },
+  { id: "moving", title: "Moving", n: 18, text: "Click the teal square, then click the orange box as it slides past." },
+  { id: "reaction", title: "Reaction", n: 15, text: "Rest the pointer on the teal square, without clicking. Click the orange square as soon as it appears." },
+  { id: "hold", title: "Hold still", n: 4, text: "Rest the pointer inside the circle and keep it still for three seconds. Don't click." },
+];
+const $ = id => document.getElementById(id);
+const arena = $("arena");
+const r1 = v => Math.round(v * 10) / 10;
+let db = null, session = null, device = "mouse", ti = -1, k = 0, totals = { miss: 0, saved: 0 }, all = [];
+let trial = null, pressed = null, startSq = null, raf = 0, timer = 0, plan = [];
+
+(async () => {
+  try { db = await window.claude?.use("db"); } catch { db = null; }
+  if (!db) $("storage-note").textContent = "Storage isn't available in this view. You can still download the recording at the end.";
+})();
+
+function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+function size() { const b = arena.getBoundingClientRect(); return [b.width, b.height]; }
+function local(e) { const b = arena.getBoundingClientRect(); return [r1(e.clientX - b.left), r1(e.clientY - b.top)]; }
+function inRect(r, [x, y]) { return x >= r[0] && x < r[0] + r[2] && y >= r[1] && y < r[1] + r[3]; }
+function inPoly(pts, [x, y]) {
+  let inside = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const [xi, yi] = pts[i], [xj, yj] = pts[j];
+    if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+function readouts() {
+  $("r-task").textContent = ti >= 0 && ti < TASKS.length ? `${ti + 1}/4 ${TASKS[ti].title}` : "–";
+  $("r-trial").textContent = ti >= 0 && ti < TASKS.length ? `${Math.min(k + 1, TASKS[ti].n)}/${TASKS[ti].n}` : "–";
+  $("r-miss").textContent = totals.miss; $("r-saved").textContent = totals.saved;
+}
+function clearArena() {
+  cancelAnimationFrame(raf); clearTimeout(timer);
+  arena.querySelectorAll(".sq,.panel,.flash,.shape").forEach(el => el.remove());
+}
+function square(rect, cls) {
+  const el = document.createElement("div");
+  el.className = "sq " + cls;
+  Object.assign(el.style, { left: rect[0] + "px", top: rect[1] + "px", width: rect[2] + "px", height: rect[3] + "px" });
+  arena.appendChild(el); return el;
+}
+function drawPoly(pts, round) {
+  const ns = "http://www.w3.org/2000/svg", svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("class", "shape");
+  const p = document.createElementNS(ns, round ? "circle" : "path");
+  if (round) { p.setAttribute("cx", round[0]); p.setAttribute("cy", round[1]); p.setAttribute("r", round[2]);
+    p.setAttribute("fill", "none"); p.setAttribute("stroke", "var(--accent)"); p.setAttribute("stroke-width", "2"); }
+  else { p.setAttribute("d", "M" + pts.map(q => q.join(",")).join("L") + "Z"); p.setAttribute("fill", "var(--target)");
+    p.setAttribute("fill-rule", "evenodd"); }
+  svg.appendChild(p); arena.appendChild(svg); return svg;
+}
+function flash([x, y], text) {
+  const el = document.createElement("div");
+  el.className = "flash"; el.textContent = text;
+  Object.assign(el.style, { left: x + 8 + "px", top: y + 8 + "px" });
+  arena.appendChild(el); setTimeout(() => el.remove(), 700);
+}
+function randomStart(pad = 60) { const [w, h] = size(); return [pad + Math.random() * (w - 2 * pad), pad + Math.random() * (h - 2 * pad)]; }
+
+function start() {
+  const picked = document.querySelector("input[name=device]:checked");
+  if (picked) device = picked.value;
+  session = new Date().toISOString().replace(/[:.]/g, "-");
+  ti = -1; all = []; totals = { miss: 0, saved: 0 };
+  nextTask();
+}
+function nextTask() {
+  ti++; k = 0;
+  if (ti >= TASKS.length) return finish();
+  const t = TASKS[ti];
+  plan = t.id === "shapes" ? shuffle(Object.keys(SHAPES).flatMap(s => Array(5).fill(s)))
+       : t.id === "moving" ? shuffle(SPEEDS.flatMap(v => [v, v, v, -v, -v, -v])) : [];
+  clearArena(); readouts();
+  const panel = document.createElement("div");
+  panel.className = "panel";
+  panel.innerHTML = `<div class="card"><h2>${ti + 1}. ${t.title}</h2><p>${t.text}</p><div class="row"><button id="begin">Begin</button></div></div>`;
+  arena.appendChild(panel);
+  $("begin").onclick = () => { panel.remove(); nextTrial(); };
+}
+function nextTrial() {
+  clearArena(); trial = null; pressed = null; readouts();
+  const t = TASKS[ti];
+  if (k >= t.n) return nextTask();
+  const [w, h] = size();
+  if (t.id === "shapes" || t.id === "moving") {
+    const [x, y] = t.id === "moving" ? [w / 2 - 12 + (Math.random() - 0.5) * 100, h - 70] : randomStart(80);
+    startSq = [r1(x), r1(y), 24, 24]; square(startSq, "start");
+  } else if (t.id === "reaction") {
+    const [x, y] = randomStart(120);
+    startSq = [r1(x), r1(y), 24, 24]; square(startSq, "start");
+    armReaction();
+  } else {
+    const [x, y] = randomStart(80);
+    trial = { kind: "hold", circle: [r1(x), r1(y), 20], moves: [], t0: null };
+    drawPoly(null, trial.circle);
+  }
+}
+
+// --- shapes and moving: the trial starts when the teal square is clicked
+function launch(t0, xy) {
+  const t = TASKS[ti], [w, h] = size();
+  if (t.id === "shapes") {
+    const name = plan[k], raw = SHAPES[name];
+    const bw = Math.max(...raw.map(p => p[0])), bh = Math.max(...raw.map(p => p[1]));
+    let ox, oy;
+    for (let tries = 0; tries < 50; tries++) {
+      const a = Math.random() * 2 * Math.PI, d = 180 + Math.random() * 180;
+      ox = xy[0] + d * Math.cos(a) - bw / 2; oy = xy[1] + d * Math.sin(a) - bh / 2;
+      if (ox > 10 && oy > 10 && ox + bw < w - 10 && oy + bh < h - 10) break;
+    }
+    ox = Math.min(Math.max(ox, 10), w - bw - 10); oy = Math.min(Math.max(oy, 10), h - bh - 10);
+    const pts = raw.map(([px, py]) => [r1(px + ox), r1(py + oy)]);
+    drawPoly(pts);
+    trial = { kind: "shape", shape: name, polygon: pts, start: xy, t0, moves: [], down: null };
+  } else {
+    const v = plan[k], tw = 30, th = 40;
+    const y = r1(80 + Math.random() * Math.max(h - 260, 10)), x0 = r1(v > 0 ? -tw + 10 : w - 10);
+    const el = square([x0, y, tw, th], "next");
+    trial = { kind: "moving", target: [x0, y, tw, th], velocity: [v, 0], start: xy, t0, moves: [], down: null };
+    const tick = now => {
+      const x = x0 + v * (now - t0) / 1000;
+      el.style.left = x + "px";
+      if (x > w + 5 || x < -tw - 5) { trial.escaped = true; record({ ...trial, down: null, up: null }); k++; return nextTrial(); }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+  }
+}
+function movingRect(tr, tms) { const [x, y, w, h] = tr.target; return [x + tr.velocity[0] * tms / 1000, y, w, h]; }
+
+// --- reaction: the trial starts when the target appears
+let hovering = false, lastXY = null;
+function armReaction() {
+  clearTimeout(timer);
+  if (!hovering) return;
+  timer = setTimeout(() => {
+    const [w, h] = size(); let rect;
+    for (let tries = 0; tries < 50; tries++) {
+      const a = Math.random() * 2 * Math.PI, d = 200 + Math.random() * 150;
+      rect = [r1(lastXY[0] + d * Math.cos(a) - 12), r1(lastXY[1] + d * Math.sin(a) - 12), 24, 24];
+      if (rect[0] > 10 && rect[1] > 10 && rect[0] < w - 34 && rect[1] < h - 34) break;
+    }
+    rect[0] = Math.min(Math.max(rect[0], 10), w - 34); rect[1] = Math.min(Math.max(rect[1], 10), h - 34);
+    square(rect, "next");
+    trial = { kind: "reaction", target: rect, start: lastXY, t0: performance.now(), moves: [], down: null };
+  }, 1000 + Math.random() * 1500);
+}
+
+arena.addEventListener("pointermove", e => {
+  if (e.pointerType === "touch") return;
+  lastXY = local(e);
+  const t = TASKS[ti];
+  if (t?.id === "reaction" && !trial && startSq) {
+    const now = inRect([startSq[0] - 6, startSq[1] - 6, 36, 36], lastXY);
+    if (now !== hovering) { hovering = now; armReaction(); }
+  }
+  if (t?.id === "hold" && trial) {
+    const [cx, cy, r] = trial.circle, inside = Math.hypot(lastXY[0] - cx, lastXY[1] - cy) <= r;
+    if (!inside) { trial.t0 = null; trial.moves = []; clearTimeout(timer); return; }
+    if (trial.t0 == null) {
+      trial.t0 = e.timeStamp; trial.start = lastXY;
+      timer = setTimeout(() => { trial.duration = 3000; record(trial); k++; nextTrial(); }, 3000);
+    }
+  }
+  if (!trial || trial.t0 == null) return;
+  const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
+  for (const ev of (evs.length ? evs : [e])) { const [x, y] = local(ev); trial.moves.push([r1(ev.timeStamp - trial.t0), x, y]); }
+});
+arena.addEventListener("pointerdown", e => {
+  if (e.button !== 0 || ti < 0 || ti >= TASKS.length) return;
+  if (e.pointerType === "touch") { flash(local(e), "needs a mouse or trackpad"); return; }
+  if (arena.querySelector(".panel")) return;
+  e.preventDefault();
+  pressed = local(e);
+  if (trial && trial.kind !== "hold" && trial.t0 != null) trial.down = [r1(e.timeStamp - trial.t0), ...pressed];
+});
+arena.addEventListener("pointerup", e => {
+  if (e.button !== 0 || !pressed) return;
+  const xy = local(e), t = TASKS[ti];
+  pressed = null;
+  if (t.id === "hold") { if (trial) { trial.t0 = null; trial.moves = []; clearTimeout(timer); flash(xy, "no clicking"); } return; }
+  if (!trial) {
+    if (t.id !== "reaction" && inRect(startSq, xy)) { arena.querySelector(".sq.start").remove(); launch(e.timeStamp, xy); }
+    return;
+  }
+  if (!trial.down) return;
+  trial.up = [r1(e.timeStamp - trial.t0), ...xy];
+  cancelAnimationFrame(raf);
+  let hit;
+  if (trial.kind === "shape") hit = inPoly(trial.polygon, trial.down.slice(1)) && inPoly(trial.polygon, xy);
+  else if (trial.kind === "moving") hit = inRect(movingRect(trial, trial.down[0]), trial.down.slice(1)) && inRect(movingRect(trial, trial.up[0]), xy);
+  else hit = inRect(trial.target, trial.down.slice(1)) && inRect(trial.target, xy);
+  trial.hit = hit;
+  if (!hit) { totals.miss++; flash(xy, "miss"); }
+  record(trial); k++;
+  hovering = false;
+  setTimeout(nextTrial, 250);
+});
+
+async function record(tr) {
+  const { t0, ...data } = tr;
+  const doc = { session, device, dpr: window.devicePixelRatio, arena: size().map(Math.round), task: TASKS[ti].id, trial: k, ...data };
+  all.push(doc); readouts();
+  if (!db) return;
+  try { await db.collection("lab").doc(`${session}-${doc.task}-${doc.trial}`).set(doc); totals.saved++; readouts(); }
+  catch (err) { console.warn("save failed", err); }
+}
+
+function finish() {
+  clearArena(); ti = TASKS.length; readouts();
+  const by = id => all.filter(d => d.task === id && !d.escaped);
+  const rate = ds => ds.length ? Math.round(100 * ds.filter(d => d.hit).length / ds.length) + "%" : "–";
+  const med = a => { const s = [...a].sort((x, y) => x - y); return s.length ? s[Math.floor(s.length / 2)] : NaN; };
+  const react = by("reaction").map(d => (d.moves.find(m => Math.hypot(m[1] - d.start[0], m[2] - d.start[1]) >= 3) || [NaN])[0]);
+  const panel = document.createElement("div");
+  panel.className = "panel";
+  panel.innerHTML = `<div class="card">
+      <h2>Done</h2>
+      <table><tbody>
+        <tr><th>shapes hit</th><td>${rate(by("shapes"))}</td></tr>
+        <tr><th>moving hit</th><td>${rate(by("moving"))}${all.some(d => d.escaped) ? ` (${all.filter(d => d.escaped).length} got away)` : ""}</td></tr>
+        <tr><th>reaction</th><td>${Math.round(med(react.filter(isFinite)))} ms to start moving</td></tr>
+      </tbody></table>
+      <p class="status ${db ? (totals.saved === all.length ? "good" : "bad") : ""}" id="save-status">${
+        db ? (totals.saved === all.length ? `All ${all.length} trials saved. Tell Claude you're done.`
+                                          : `${totals.saved} of ${all.length} trials saved. Download the file as a backup.`)
+           : "Not saved here. Download the file and give it to Claude."}</p>
+      <div class="row"><button id="again">Run again</button><button class="secondary" id="dl">Download JSON</button></div></div>`;
+  arena.appendChild(panel);
+  $("again").onclick = start; $("dl").onclick = download;
+}
+async function download() {
+  let dl = null;
+  try { dl = await window.claude?.use("downloads"); } catch { dl = null; }
+  const s = $("save-status");
+  if (!dl) { if (s) { s.textContent = "Download isn't available in this view."; s.className = "status bad"; } return; }
+  try { await dl.save({ filename: `pointer-lab-${session}.json`, data: JSON.stringify({ trials: all }) }); }
+  catch (err) { console.warn("download not saved", err); }
+}
+$("go").onclick = start;
+</script>
