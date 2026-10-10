@@ -155,9 +155,11 @@ class PointerPlanner:
             out.append((x, y, t0 + i / POLL_HZ))
         return out
 
-    def plan_move(self, start: tuple[float, float], box: Rect) -> tuple[list[PointerEvent], tuple[float, float]]:
+    def plan_move(self, start: tuple[float, float], box: Rect,
+                  aim: tuple[float, float] | None = None) -> tuple[list[PointerEvent], tuple[float, float]]:
         """Move from `start` into `box`. Returns (events, the resting position
-        without tremor), so a click can follow from where the hand really is."""
+        without tremor), so a click can follow from where the hand really is.
+        `aim` overrides where in the box the user means to go."""
         self._handedness = self.rng.choice((-1, 1))
         self._tremor_hz = self.rng.uniform(4.0, 8.0)
         # Tremor waxes and wanes (with effort, fatigue, stress), so its size
@@ -167,7 +169,7 @@ class PointerPlanner:
         self._phase = (self.rng.uniform(0, 2 * math.pi), self.rng.uniform(0, 2 * math.pi))
         self._t = 0.0
 
-        aim = self.aim_point(box)
+        aim = self.aim_point(box) if aim is None else aim
         width = min(box.width, box.height)
         pos = (float(start[0]), float(start[1]))
         points: list[tuple[float, float, float]] = []
@@ -210,9 +212,9 @@ class PointerPlanner:
     # --- clicking -------------------------------------------------------------
 
     def plan_click(self, start: tuple[float, float], box: Rect, button: str = "left",
-                   clicks: int = 1) -> list[PointerEvent]:
+                   clicks: int = 1, aim: tuple[float, float] | None = None) -> list[PointerEvent]:
         """Move into `box`, settle, press and release (twice for a double click)."""
-        events, rest = self.plan_move(start, box)
+        events, rest = self.plan_move(start, box, aim)
         pos = (events[-1].x, events[-1].y) if events else (round(start[0]), round(start[1]))
         if self.profile.pointer_tremor_px <= 0:
             pos = (round(rest[0]), round(rest[1]))

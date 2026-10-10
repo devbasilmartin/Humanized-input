@@ -95,6 +95,35 @@ fitted, such as where in the movement the speed peaks and how many
 corrective submovements there are, so you can see where the model differs
 from a real hand.
 
+## Comparing mouse styles
+
+[`experiment.py`](humanized_input/experiment.py) compares ways of clicking on
+targets of any shape: rectangles, or polygons for irregular outlines whose
+centre is not on the shape. A style picks a `path` (`human`, `linear`,
+`instant`), an `aim` (`human`, `center`, `centroid`, `deepest`, `uniform`),
+a `speed` multiplier, extra `aim_jitter_px`, and any `pointer_*` setting.
+
+```
+$ python examples/compare_styles.py
+style               hits   mean s   p90 s
+precise           100.0%    0.123   0.123
+human-deepest      98.3%    0.846   1.054
+naive-centre       33.3%    0.777   0.927
+...
+```
+
+To use styles from another program, in any language, run the bridge and
+talk JSON lines over stdin/stdout. It picks a style for each click, returns
+timed events to play back, and tallies the results you report:
+
+```bash
+python -m humanized_input.bridge examples/mouse_styles.yaml --log outcomes.jsonl
+python -m humanized_input.bridge examples/mouse_styles.yaml --log outcomes.jsonl --summary
+```
+
+See [`bridge.py`](humanized_input/bridge.py) for the message format. From
+Python, call `experiment.plan()` and play the events with `execute()`.
+
 ## Many users, and users who change
 
 The built-in profiles are averages. [`population.py`](humanized_input/population.py)
@@ -211,6 +240,7 @@ normal stream of `mousemove`, `mousedown` and `mouseup` events.
 | [`ax.py`](humanized_input/ax.py) | Reads Chromium's **accessibility tree** over the DevTools Protocol. This is what screen readers actually consume, not the HTML. |
 | [`pointer.py`](humanized_input/pointer.py) | Mouse movement: Fitts's law timing, minimum-jerk submovements, corrective moves, curved paths, click scatter, tremor. |
 | [`fit.py`](humanized_input/fit.py) | Measure recorded clicks and fit a profile's pointer fields to them by simulation. |
+| [`experiment.py`](humanized_input/experiment.py), [`bridge.py`](humanized_input/bridge.py) | Compare mouse styles on irregular shapes; a JSON-lines bridge for other programs that logs which styles work. |
 | [`population.py`](humanized_input/population.py) | Speed-accuracy trade-off, a population of different users, practice and fatigue. |
 | [`backends/`](humanized_input/backends/__init__.py) | The small interface (snapshot, focused, press) that lets the same user drive a browser ([`browser.py`](humanized_input/backends/browser.py)) or a Windows app ([`windows_uia.py`](humanized_input/backends/windows_uia.py): UI Automation to AXItems, [`win_input.py`](humanized_input/backends/win_input.py): SendInput keystrokes and mouse). |
 | [`desktop.py`](humanized_input/desktop.py) | Launch or attach to a Windows app by window title. |

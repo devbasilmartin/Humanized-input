@@ -1,0 +1,19 @@
+# Mouse styles to compare. Use with:
+#   python -m humanized_input.bridge examples/mouse_styles.yaml --log outcomes.jsonl
+# Every pointer_* profile setting can go under `overrides`.
+styles:
+  - {name: precise, path: instant, aim: deepest}
+  - {name: precise-glide, path: linear, aim: deepest}
+  - {name: naive-centre, path: linear, aim: center}
+  - {name: human, path: human, aim: human}
+  - {name: human-deepest, path: human, aim: deepest}
+  - name: human-fast-sloppy
+    path: human
+    aim: human
+    speed: 2
+    overrides: {pointer_spread: 1.0, pointer_stop_tol: 0.4}
+  - name: human-slow-careful
+    path: human
+    aim: deepest
+    speed: 0.7
+    overrides: {pointer_spread: 0.3, pointer_stop_tol: 0.05, pointer_settle_s: 0.2}
