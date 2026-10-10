@@ -31,7 +31,7 @@ def main():
     print("\nFitted pointer settings:")
     for key, value in profile.to_dict().items():
         if key.startswith("pointer_"):
-            print(f"  {key:<20}{value:.3f}")
+            print(f"  {key:<22}{value:.3f}")
     if args.save:
         data = profile.to_dict()
         out = Path(args.save)

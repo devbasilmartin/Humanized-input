@@ -105,7 +105,7 @@ class PointerPlanner:
         margin = self.profile.pointer_tremor_px + 1
         return box.inset(min(margin, box.width / 2 - 0.5), min(margin, box.height / 2 - 0.5))
 
-    def _landing(self, start, aim) -> tuple[float, float]:
+    def _landing(self, start, aim, reach: float = 0.95) -> tuple[float, float]:
         """Where a ballistic move toward `aim` actually ends: a little short on
         average, scattered more along the direction of travel than across it."""
         dx, dy = aim[0] - start[0], aim[1] - start[1]
@@ -113,7 +113,7 @@ class PointerPlanner:
         if dist < 1:
             return aim
         err = self.profile.pointer_spread
-        along = self.rng.gauss(0.95, 0.05 * err)  # humans tend to undershoot
+        along = self.rng.gauss(reach, 0.05 * err)  # humans tend to undershoot
         across = self.rng.gauss(0.0, 0.02 * err)
         ux, uy = dx / dist, dy / dist
         return (start[0] + dist * (along * ux - across * uy),
@@ -169,9 +169,10 @@ class PointerPlanner:
             if n and safe.contains(round(pos[0]), round(pos[1])):
                 break  # the pointer reports whole pixels, so judge those
             last = n == MAX_CORRECTIONS
-            end = aim if last or dist < 2 else self._landing(pos, aim)
-            # The first stroke is most of the Fitts time; corrections are short.
-            duration = self.fitts_time(dist, width) * (0.8 if n == 0 else 0.6)
+            reach = self.profile.pointer_reach if n == 0 else 0.95
+            end = aim if last or dist < 2 else self._landing(pos, aim, reach)
+            # The first stroke takes its share of the Fitts time; corrections are short.
+            duration = self.fitts_time(dist, width) * (self.profile.pointer_primary_frac if n == 0 else 0.6)
             if n:
                 self._t += self.human._lognormal(0.12, 0.3)  # see the miss, correct
             stroke = self._submovement(pos, end, duration, self._t)

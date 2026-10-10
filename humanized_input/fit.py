@@ -150,6 +150,20 @@ def _submovements(speeds: list[tuple[float, float]]) -> int:
     return count
 
 
+def _primary(tr: Trial, speeds: list[tuple[float, float]]) -> tuple[float, float] | None:
+    """(share of the distance covered, share of the movement time taken) when
+    the first fast stroke ends: the speed first falls below 25% of its peak."""
+    if not speeds:
+        return None
+    peak_i = max(range(len(speeds)), key=lambda i: speeds[i][1])
+    peak = speeds[peak_i][1]
+    end_t = next((t for t, s in speeds[peak_i:] if s < 0.25 * peak), speeds[-1][0])
+    t_on, mt = _onset(tr), tr.down[0] - _onset(tr)
+    at = min(tr.moves, key=lambda m: abs(m[0] - end_t))
+    left = math.dist(at[1:], tr.box.center)
+    return 1 - left / tr.distance, (end_t - t_on) / mt
+
+
 def _bow(tr: Trial) -> float:
     """Largest sideways distance from the straight start-to-target line, / D."""
     (sx, sy), (cx, cy) = tr.start, tr.box.center
@@ -175,7 +189,7 @@ def measure(trials: list[Trial]) -> dict[str, float]:
         ((t.down[1] - t.box.center[0]) / t.width) ** 2 + ((t.down[2] - t.box.center[1]) / t.width) ** 2
         for t in trials) / 2) * 4.133
 
-    settle, drift, peak_at, subs = [], [], [], []
+    settle, drift, peak_at, subs, reach, primary_t = [], [], [], [], [], []
     for t in trials:
         before = [m for m in t.moves if m[0] <= t.down[0]]
         if before:
@@ -188,6 +202,10 @@ def measure(trials: list[Trial]) -> dict[str, float]:
             peak_t = max(sp, key=lambda p: p[1])[0]
             peak_at.append((peak_t - _onset(t)) / mt)
             subs.append(_submovements(sp))
+            first = _primary(t, sp)
+            if first:
+                reach.append(first[0])
+                primary_t.append(first[1])
     far = [t for t in trials if t.distance > 100]
     return {
         "fitts_a_s": a,
@@ -195,6 +213,8 @@ def measure(trials: list[Trial]) -> dict[str, float]:
         "miss_rate": 1 - len(hits) / len(trials),
         "click_scatter": scatter,
         "path_bow": statistics.mean(_bow(t) for t in far) if far else math.nan,
+        "first_stroke_reach": statistics.median(reach) if reach else math.nan,
+        "first_stroke_time": statistics.median(primary_t) if primary_t else math.nan,
         "settle_s": statistics.median(settle) if settle else math.nan,
         "hold_s": statistics.median(t.up[0] - t.down[0] for t in trials),
         "hold_drift_px": statistics.mean(drift),
@@ -209,6 +229,8 @@ FITTED = {
     "fitts_b_s_per_bit": "pointer_b_s",
     "click_scatter": "pointer_spread",
     "path_bow": "pointer_curvature",
+    "first_stroke_reach": "pointer_reach",
+    "first_stroke_time": "pointer_primary_frac",
     "settle_s": "pointer_settle_s",
     "hold_s": "pointer_hold_s",
     "hold_drift_px": "pointer_tremor_px",
@@ -247,6 +269,8 @@ def fit_profile(trials: list[Trial], base: Profile | str = "intermediate", name:
             elif got > 1e-6:
                 ratio = min(max(want / got, 0.5), 2.0)  # damped, so it cannot run away
                 changes[fld] = max(cur * ratio, 1e-3)
+        changes["pointer_reach"] = min(changes.get("pointer_reach", p.pointer_reach), 1.1)
+        changes["pointer_primary_frac"] = min(changes.get("pointer_primary_frac", p.pointer_primary_frac), 1.0)
         p = replace(p, **changes)
         sim = measure(simulate(p, trials, repeats))
     return p, target, sim

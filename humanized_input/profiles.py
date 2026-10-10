@@ -15,7 +15,9 @@ Every field maps to something you can observe in real screen reader users:
   pointer_a_s / pointer_b_s are the Fitts's law constants (seconds, and
   seconds per bit of difficulty); pointer_spread scales how widely clicks
   scatter; pointer_curvature how much paths bow; pointer_tremor_px the
-  amplitude of hand tremor; pointer_settle_s the pause on the target before
+  amplitude of hand tremor; pointer_reach the share of the distance the first
+  fast stroke covers and pointer_primary_frac the share of the Fitts time it
+  takes (many people flick most of the way, then home in slowly); pointer_settle_s the pause on the target before
   pressing and pointer_hold_s how long the button stays down. Most blind users do not use a mouse at all;
   these matter for low-vision, motor-impaired and sighted keyboard+mouse users.
 """
@@ -47,6 +49,8 @@ class Profile:
     pointer_spread: float = 1.0
     pointer_curvature: float = 0.08
     pointer_tremor_px: float = 0.0
+    pointer_reach: float = 0.95
+    pointer_primary_frac: float = 0.8
     pointer_settle_s: float = 0.12
     pointer_hold_s: float = 0.095
     max_steps: int = 80
@@ -69,6 +73,8 @@ class Profile:
             raise ValueError("pointer_a_s must be >= 0 and pointer_b_s > 0")
         if self.pointer_spread < 0 or self.pointer_tremor_px < 0:
             raise ValueError("pointer_spread and pointer_tremor_px must be >= 0")
+        if not 0 < self.pointer_reach <= 1.2 or not 0 < self.pointer_primary_frac <= 1:
+            raise ValueError("pointer_reach must be in (0, 1.2] and pointer_primary_frac in (0, 1]")
         if self.pointer_settle_s <= 0 or self.pointer_hold_s <= 0:
             raise ValueError("pointer_settle_s and pointer_hold_s must be > 0")
 

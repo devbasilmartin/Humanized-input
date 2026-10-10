@@ -24,7 +24,8 @@ def ring_geometry(widths=(12, 24, 48), distances=(150, 300, 500), n=9):
 
 
 HIDDEN = replace(BUILTIN_PROFILES["novice"], pointer_a_s=0.2, pointer_b_s=0.14, pointer_spread=0.8,
-                 pointer_curvature=0.05, pointer_tremor_px=1.5, pointer_settle_s=0.2, pointer_hold_s=0.13)
+                 pointer_curvature=0.05, pointer_tremor_px=1.5, pointer_settle_s=0.2, pointer_hold_s=0.13,
+                 pointer_reach=0.7, pointer_primary_frac=0.35)
 
 
 def test_measures_respond_to_the_profile():
@@ -41,7 +42,8 @@ def test_fit_recovers_a_hidden_profile():
     fitted, want, got = fit_profile(recording, "intermediate", repeats=1)
     for key in FITTED:
         assert got[key] == pytest.approx(want[key], rel=0.1, abs=0.02), key
-    for fld in ("pointer_spread", "pointer_curvature", "pointer_settle_s", "pointer_hold_s", "pointer_tremor_px"):
+    for fld in ("pointer_spread", "pointer_curvature", "pointer_settle_s", "pointer_hold_s", "pointer_tremor_px",
+                "pointer_reach", "pointer_primary_frac"):
         assert getattr(fitted, fld) == pytest.approx(getattr(HIDDEN, fld), rel=0.2), fld
     # Non-pointer traits come from the base profile.
     assert fitted.typing_wpm == BUILTIN_PROFILES["intermediate"].typing_wpm and fitted.name == "me"

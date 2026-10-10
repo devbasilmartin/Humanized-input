@@ -111,7 +111,9 @@ function readouts() {
 function clearArena() { arena.querySelectorAll(".sq,.panel,.flash").forEach(el => el.remove()); }
 
 function startSession() {
-  device = document.querySelector("input[name=device]:checked").value;
+  // The intro (and its device choice) is gone on later rounds: keep the first answer.
+  const picked = document.querySelector("input[name=device]:checked");
+  if (picked) device = picked.value;
   session = new Date().toISOString().replace(/[:.]/g, "-");
   blocks = shuffle(W_LIST.flatMap(W => D_LIST.map(D => ({ W, D }))));
   allBlocks = []; totals = { clicks: 0, miss: 0, saved: 0 }; bi = -1;
