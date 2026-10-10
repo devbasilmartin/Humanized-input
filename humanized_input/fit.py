@@ -7,10 +7,14 @@ down to the numbers motor-control research uses to describe pointing:
 
 - Fitts's law intercept and slope (movement time against difficulty),
 - click scatter: a part that grows with target size and a fixed floor in
-  pixels, and the miss rate (not fitted, so it tests the scatter model),
+  pixels, and the miss rate (steered by how close to the aim point the user
+  gets before clicking),
 - how much paths bow, where in the movement the speed peaks, and how
   many corrective submovements there are,
-- the pause on the target before pressing, how long the button is held,
+- the first fast stroke: how far it reaches, how much that varies, and how
+  long it takes,
+- the pause on the target before pressing and how it grows on small
+  targets, how long the button is held,
   and how far the pointer drifts while it is held.
 
 `fit_profile` then adjusts the pointer_* fields of a base profile until the
@@ -199,11 +203,13 @@ def measure(trials: list[Trial]) -> dict[str, float]:
     else:
         floor, slope = math.nan, sds[0] / widths[0]
 
-    settle, drift, peak_at, subs, reach, primary_t = [], [], [], [], [], []
+    settle, drift, peak_at, subs, reach, primary_t, primary_s = [], [], [], [], [], [], []
+    settle_by_width: dict[float, list[float]] = {}
     for t in trials:
         before = [m for m in t.moves if m[0] <= t.down[0]]
         if before:
             settle.append(t.down[0] - before[-1][0])
+            settle_by_width.setdefault(t.width, []).append(settle[-1])
         held = [m for m in t.moves if t.down[0] < m[0] <= t.up[0]] + [t.up]
         drift.append(max(math.dist(m[1:], t.down[1:]) for m in held))
         sp = _speeds(t)
@@ -216,7 +222,16 @@ def measure(trials: list[Trial]) -> dict[str, float]:
             if first:
                 reach.append(first[0])
                 primary_t.append(first[1])
+                primary_s.append(first[1] * mt)
     far = [t for t in trials if t.distance > 100]
+    # Pause before pressing against target size, on log scales:
+    # log(settle) = log(settle at 24 px) - exp * log(W / 24).
+    ws = sorted(w for w, v in settle_by_width.items() if statistics.median(v) > 0)
+    if len(ws) > 1:
+        c, m = _fit_line([math.log(w / 24) for w in ws], [math.log(statistics.median(settle_by_width[w])) for w in ws])
+        settle_24, settle_exp = math.exp(c), -m
+    else:
+        settle_24, settle_exp = (statistics.median(settle) if settle else math.nan), math.nan
     return {
         "fitts_a_s": a,
         "fitts_b_s_per_bit": b,
@@ -225,10 +240,13 @@ def measure(trials: list[Trial]) -> dict[str, float]:
         "scatter_floor_px": floor,
         "path_bow": statistics.mean(_bow(t) for t in far) if far else math.nan,
         "first_stroke_reach": statistics.median(reach) if reach else math.nan,
+        "first_stroke_reach_sd": statistics.stdev(reach) if len(reach) > 1 else math.nan,
+        "first_stroke_s": statistics.median(primary_s) if primary_s else math.nan,
         "first_stroke_time": statistics.median(primary_t) if primary_t else math.nan,
-        "settle_s": statistics.median(settle) if settle else math.nan,
+        "settle_s": settle_24,
+        "settle_size_exp": settle_exp,
         "hold_s": statistics.median(t.up[0] - t.down[0] for t in trials),
-        "hold_drift_px": statistics.mean(drift),
+        "hold_drift_px": statistics.median(drift),  # median: a stray drag is not a tremor
         "peak_speed_at": statistics.median(peak_at) if peak_at else math.nan,
         "submovements": statistics.mean(subs) if subs else math.nan,
     }
@@ -242,15 +260,19 @@ FITTED = {
     "scatter_floor_px": "pointer_noise_px",
     "path_bow": "pointer_curvature",
     "first_stroke_reach": "pointer_reach",
-    "first_stroke_time": "pointer_primary_frac",
+    "first_stroke_reach_sd": "pointer_reach_sd",
+    "first_stroke_s": "pointer_flick_s",
     "settle_s": "pointer_settle_s",
+    "settle_size_exp": "pointer_settle_exp",
     "hold_s": "pointer_hold_s",
     "hold_drift_px": "pointer_tremor_px",
+    "miss_rate": "pointer_stop_tol",
 }
 
 
 def fit_profile(trials: list[Trial], base: Profile | str = "intermediate", name: str = "me",
-                iterations: int = 10, repeats: int = 2) -> tuple[Profile, dict, dict]:
+                iterations: int = 16, repeats: int = 2,
+                fields: set[str] | None = None) -> tuple[Profile, dict, dict]:
     """Tune `base`'s pointer fields so its simulated clicks on these same
     targets match the recording. Returns (profile, recorded, simulated).
 
@@ -258,8 +280,10 @@ def fit_profile(trials: list[Trial], base: Profile | str = "intermediate", name:
     drives it (the intercept additively, the rest by ratio). The model's
     internals (submovements, clamping, rounding) sit between a field and its
     measure, so matching by simulation is more faithful than plugging the
-    recorded numbers straight in.
+    recorded numbers straight in. `fields` limits fitting to some pointer
+    fields (the rest keep `base`'s values), e.g. to compare model variants.
     """
+    fitted = {k: f for k, f in FITTED.items() if fields is None or f in fields}
     if isinstance(base, str):
         base = load_profile(base)
     target = measure(trials)
@@ -267,24 +291,49 @@ def fit_profile(trials: list[Trial], base: Profile | str = "intermediate", name:
                 notes=[*base.notes, f"pointer fields fitted from a recording (base {base.name})"])
     if target["hold_drift_px"] > 0.5 and p.pointer_tremor_px == 0:
         p = replace(p, pointer_tremor_px=1.0)
+    # Fitted profiles use a fixed-length first flick, which real recordings
+    # show (its share of the movement time is then a check, not a setting).
+    if "first_stroke_s" in fitted and not math.isnan(target["first_stroke_s"]):
+        p = replace(p, pointer_flick_s=target["first_stroke_s"])
+    def misfit(sim: dict) -> float:
+        """Total squared relative error over the fitted measures."""
+        total = 0.0
+        for key in fitted:
+            want, got = target[key], sim[key]
+            if not (math.isnan(want) or math.isnan(got)):
+                total += ((got - want) / max(abs(want), 0.02)) ** 2
+        return total
+
     sim = measure(simulate(p, trials, repeats))
+    best = (misfit(sim), p, sim)
     for _ in range(iterations):
         changes = {}
-        for key, fld in FITTED.items():
+        for key, fld in fitted.items():
             want, got, cur = target[key], sim[key], getattr(p, fld)
             if math.isnan(want) or math.isnan(got):
                 continue
             if key in ("fitts_a_s", "scatter_floor_px"):
                 changes[fld] = max(0.0, cur + (want - got))
+            elif key == "miss_rate":
+                if want > 0 and got < 1e-6:
+                    changes[fld] = cur * 1.5  # no misses yet: loosen and look again
+                elif got > 1e-6:
+                    changes[fld] = min(max(cur * min(max(want / got, 0.67), 1.5), 0.0), 2.0)
+            elif key == "settle_size_exp":
+                changes[fld] = min(max(cur + (want - got), 0.0), 2.0)
             elif key == "hold_drift_px" and want <= 0.5:
                 changes[fld] = 0.0  # a steady hand: no tremor at all
             elif got > 1e-6:
                 ratio = min(max(want / got, 0.5), 2.0)  # damped, so it cannot run away
                 changes[fld] = max(cur * ratio, 1e-3)
-        changes["pointer_reach"] = min(changes.get("pointer_reach", p.pointer_reach), 1.1)
-        changes["pointer_primary_frac"] = min(changes.get("pointer_primary_frac", p.pointer_primary_frac), 1.0)
+        if "pointer_reach" in changes:
+            changes["pointer_reach"] = min(changes["pointer_reach"], 1.1)
         p = replace(p, **changes)
         sim = measure(simulate(p, trials, repeats))
+        if misfit(sim) < best[0]:
+            best = (misfit(sim), p, sim)
+    # Simulation noise makes later rounds wander a little: keep the best one.
+    _, p, sim = best
     return p, target, sim
 
 

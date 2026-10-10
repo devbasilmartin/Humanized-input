@@ -84,9 +84,11 @@ Automation; WinForms, WPF, WinUI, Qt and Chromium/Electron apps expose a lot.
 2. `python examples/fit_my_pointer.py pointer-recording.json --save profiles/me.yaml`
 
 [`fit.py`](humanized_input/fit.py) measures the recording (Fitts's law
-intercept and slope, click scatter and its fixed floor, path bow, how far
-and how long the first fast stroke goes, pause before pressing, hold time,
-drift while held). It then tunes the pointer fields until the
+intercept and slope, misses, click scatter and its fixed floor, path bow,
+how far the first fast stroke reaches, how much that varies and how long it
+takes, the pause before pressing and how it grows on small targets, hold
+time, drift while held). Fitted profiles use a fixed-length first flick
+(`pointer_flick_s`), which real recordings show regardless of distance. It then tunes the pointer fields until the
 simulated user, clicking the same targets from the same start points,
 produces the same numbers. The report also lists measures that are not
 fitted, such as where in the movement the speed peaks and how many

@@ -112,7 +112,7 @@ class PointerPlanner:
         margin = self.profile.pointer_tremor_px + 1
         return box.inset(min(margin, box.width / 2 - 0.5), min(margin, box.height / 2 - 0.5))
 
-    def _landing(self, start, aim, reach: float = 0.95) -> tuple[float, float]:
+    def _landing(self, start, aim, reach: float = 0.95, reach_sd: float | None = None) -> tuple[float, float]:
         """Where a ballistic move toward `aim` actually ends: a little short on
         average, scattered more along the direction of travel than across it."""
         dx, dy = aim[0] - start[0], aim[1] - start[1]
@@ -120,7 +120,8 @@ class PointerPlanner:
         if dist < 1:
             return aim
         err = self.profile.pointer_spread
-        along = self.rng.gauss(reach, 0.05 * err)  # humans tend to undershoot
+        along = self.rng.gauss(reach, 0.05 * err if reach_sd is None else reach_sd)  # humans tend to undershoot
+        along = min(max(along, 0.2), 1.3)
         across = self.rng.gauss(0.0, 0.02 * err)
         ux, uy = dx / dist, dy / dist
         return (start[0] + dist * (along * ux - across * uy),
@@ -172,13 +173,19 @@ class PointerPlanner:
         points: list[tuple[float, float, float]] = []
         for n in range(MAX_CORRECTIONS + 1):
             dist = math.hypot(aim[0] - pos[0], aim[1] - pos[1])
-            if n and dist <= 0.15 * width + 1:
+            if n and dist <= self.profile.pointer_stop_tol * width + 1:
                 break  # close enough to where they were aiming
             last = n == MAX_CORRECTIONS
-            reach = self.profile.pointer_reach if n == 0 else 0.95
-            end = aim if last or dist < 2 else self._landing(pos, aim, reach)
-            # The first stroke takes its share of the Fitts time; corrections are short.
-            duration = self.fitts_time(dist, width) * (self.profile.pointer_primary_frac if n == 0 else 0.6)
+            p = self.profile
+            if n == 0:
+                end = aim if dist < 2 else self._landing(pos, aim, p.pointer_reach, p.pointer_reach_sd)
+                if p.pointer_flick_s > 0:
+                    duration = self.human._lognormal(p.pointer_flick_s, 0.2)  # a fixed-length flick
+                else:
+                    duration = self.fitts_time(dist, width) * p.pointer_primary_frac
+            else:
+                end = aim if last or dist < 2 else self._landing(pos, aim)
+                duration = self.fitts_time(dist, width) * 0.6  # corrections are short
             if n:
                 self._t += self.human._lognormal(0.12, 0.3)  # see the miss, correct
             stroke = self._submovement(pos, end, duration, self._t)
@@ -211,7 +218,9 @@ class PointerPlanner:
             pos = (round(rest[0]), round(rest[1]))
             if not events or (events[-1].x, events[-1].y) != pos:
                 events.append(PointerEvent("move", *pos, 1 / POLL_HZ))
-        settle = self.human._lognormal(self.profile.pointer_settle_s, 0.3)  # check it is on target
+        # Check it is on target; smaller targets take longer to check.
+        w = max(min(box.width, box.height), 1.0)
+        settle = self.human._lognormal(self.profile.pointer_settle_s * (24 / w) ** self.profile.pointer_settle_exp, 0.3)
         for c in range(clicks):
             gap = settle if c == 0 else self.human._lognormal(0.13, 0.25)  # double-click gap
             self._t += gap

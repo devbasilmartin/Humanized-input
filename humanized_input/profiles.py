@@ -18,8 +18,15 @@ Every field maps to something you can observe in real screen reader users:
   in pixels (pointer_noise_px), so small targets get missed more often; pointer_curvature how much paths bow; pointer_tremor_px the
   amplitude of hand tremor; pointer_reach the share of the distance the first
   fast stroke covers and pointer_primary_frac the share of the Fitts time it
-  takes (many people flick most of the way, then home in slowly); pointer_settle_s the pause on the target before
-  pressing and pointer_hold_s how long the button stays down. Most blind users do not use a mouse at all;
+  takes (many people flick most of the way, then home in slowly), or, when
+  pointer_flick_s is set, a fixed flick duration instead; pointer_reach_sd how
+  much that reach varies (short flicks need a second, visible correction);
+  pointer_stop_tol how close to the aim point (as a share of the target size)
+  they must get before they stop correcting and click, a personal
+  speed-accuracy criterion; pointer_settle_s the pause on the target before
+  pressing, for a 24 px target; pointer_settle_exp how much longer that pause
+  gets on smaller targets (pause ~ (24 / W) ** exp); pointer_hold_s how long
+  the button stays down. Most blind users do not use a mouse at all;
   these matter for low-vision, motor-impaired and sighted keyboard+mouse users.
 """
 
@@ -52,8 +59,12 @@ class Profile:
     pointer_curvature: float = 0.08
     pointer_tremor_px: float = 0.0
     pointer_reach: float = 0.95
+    pointer_reach_sd: float = 0.05
     pointer_primary_frac: float = 0.8
+    pointer_flick_s: float = 0.0
+    pointer_stop_tol: float = 0.15
     pointer_settle_s: float = 0.12
+    pointer_settle_exp: float = 0.0
     pointer_hold_s: float = 0.095
     max_steps: int = 80
     seed: int | None = None
@@ -77,6 +88,10 @@ class Profile:
             raise ValueError("pointer_spread, pointer_noise_px and pointer_tremor_px must be >= 0")
         if not 0 < self.pointer_reach <= 1.2 or not 0 < self.pointer_primary_frac <= 1:
             raise ValueError("pointer_reach must be in (0, 1.2] and pointer_primary_frac in (0, 1]")
+        if self.pointer_reach_sd < 0 or self.pointer_flick_s < 0 or not 0 <= self.pointer_settle_exp <= 2:
+            raise ValueError("pointer_reach_sd and pointer_flick_s must be >= 0, pointer_settle_exp in [0, 2]")
+        if self.pointer_stop_tol < 0:
+            raise ValueError("pointer_stop_tol must be >= 0")
         if self.pointer_settle_s <= 0 or self.pointer_hold_s <= 0:
             raise ValueError("pointer_settle_s and pointer_hold_s must be > 0")
 
