@@ -32,6 +32,40 @@ from .experiment import MouseStyle, Shape, evaluate, table
 from .profiles import Profile, load_profile
 
 STYLE_FIELDS = {f.name for f in fields(MouseStyle)} - {"name", "profile"}
+
+# Every setting a style can change, for the `params` command and the UI.
+# (key, group, kind, choices or (min, max, step), help)
+PARAMS = [
+    ("path", "Style", "choice", ["human", "linear", "ease", "instant"],
+     "How the pointer travels: the full hand model, a straight line, a pyautogui-style eased glide, or a jump."),
+    ("aim", "Style", "choice", ["human", "center", "middle", "centroid", "deepest", "uniform"],
+     "Where in the target to click. deepest is the point furthest from every edge."),
+    ("speed", "Style", "number", (0.25, 4.0, 0.05), "Pace multiplier: 2 means everything takes half as long."),
+    ("aim_jitter_px", "Style", "number", (0.0, 20.0, 0.5), "Extra random offset added to the aim point, in pixels."),
+    ("lead", "Style", "bool", None, "For moving targets, aim where the target will be mid-press."),
+    ("clicks", "Style", "int", (1, 3, 1), "Clicks per target: 2 for a double click."),
+    ("button", "Style", "choice", ["left", "right", "middle"], "Which mouse button."),
+    ("ease_s", "Style", "range", (0.0, 1.0, 0.01), "ease path only: the glide takes a random time in this range (s)."),
+    ("pointer_a_s", "Timing", "number", (0.0, 0.6, 0.005), "Fitts's law intercept: fixed time per move (s)."),
+    ("pointer_b_s", "Timing", "number", (0.02, 0.6, 0.005), "Fitts's law slope: extra time per bit of difficulty (s)."),
+    ("pointer_flick_s", "Timing", "number", (0.0, 0.6, 0.005),
+     "Length of the first fast stroke (s). 0 uses a share of the Fitts time instead (primary_frac)."),
+    ("pointer_primary_frac", "Timing", "number", (0.05, 1.0, 0.01),
+     "When flick_s is 0: the first stroke's share of the Fitts time."),
+    ("pointer_settle_s", "Timing", "number", (0.0, 0.6, 0.005), "Pause on a 24 px target before pressing (s)."),
+    ("pointer_settle_exp", "Timing", "number", (0.0, 2.0, 0.01), "How much longer that pause gets on smaller targets."),
+    ("pointer_hold_s", "Timing", "number", (0.01, 0.5, 0.005), "How long the button stays down (s)."),
+    ("pointer_spread", "Accuracy", "number", (0.0, 2.0, 0.01),
+     "Aim scatter that grows with target size (1.0 = SD of width / 4.133). Used by aim=human."),
+    ("pointer_noise_px", "Accuracy", "number", (0.0, 6.0, 0.05), "Aim scatter that stays the same at any size (px SD)."),
+    ("pointer_stop_tol", "Accuracy", "number", (0.0, 1.0, 0.01),
+     "How close to the aim point (as a share of target size) before stopping corrections and clicking."),
+    ("pointer_tremor_px", "Accuracy", "number", (0.0, 10.0, 0.1), "Hand tremor amplitude, also while the button is held (px)."),
+    ("pointer_curvature", "Path shape", "number", (0.0, 0.5, 0.005), "How much paths bow to one side."),
+    ("pointer_reach", "Path shape", "number", (0.3, 1.1, 0.01), "Share of the distance the first stroke covers."),
+    ("pointer_reach_sd", "Path shape", "number", (0.0, 0.4, 0.005),
+     "How much that reach varies; short first strokes need a visible second correction."),
+]
 PROFILE_FIELDS = {f.name for f in fields(Profile)} - {"name"}
 
 STARTER = [
@@ -136,6 +170,7 @@ def main(argv=None) -> None:
     ap.add_argument("--dir", default="styles", help="the style folder (default: ./styles)")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("list")
+    sub.add_parser("params", help="every setting --set accepts, with its range")
     sub.add_parser("starter", help="save the starter styles (skips names that exist)")
     p = sub.add_parser("show"); p.add_argument("name")
     p = sub.add_parser("delete"); p.add_argument("name")
@@ -154,7 +189,16 @@ def main(argv=None) -> None:
     args = ap.parse_args(argv)
     lib = StyleLibrary(args.dir)
 
-    if args.cmd == "list":
+    if args.cmd == "params":
+        group = None
+        for key, grp, kind, spec, help_ in PARAMS:
+            if grp != group:
+                print(f"\n{grp}")
+                group = grp
+            rng = "/".join(spec) if kind == "choice" else "true/false" if kind == "bool" else \
+                f"{spec[0]:g}-{spec[1]:g}" + (" (low, high)" if kind == "range" else "")
+            print(f"  {key:<22}{rng:<48}{help_}")
+    elif args.cmd == "list":
         names = lib.names()
         print("\n".join(_summary(lib.load(n)) for n in names) if names else
               f"no styles in {lib.folder}/ yet; `starter` saves a few to begin with")

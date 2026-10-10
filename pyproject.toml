@@ -16,3 +16,6 @@ test = ["pytest>=8", "playwright>=1.45"]
 
 [tool.setuptools]
 packages = ["humanized_input", "humanized_input.backends"]
+
+[tool.setuptools.package-data]
+humanized_input = ["ui.html"]

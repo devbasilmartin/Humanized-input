@@ -126,6 +126,19 @@ naive-centre       33.3%    0.777   0.927
 ...
 ```
 
+### Control panel
+
+```bash
+python -m humanized_input.ui            # opens http://127.0.0.1:8765, editing ./styles
+python -m humanized_input.styles params # every setting, its range and what it does
+```
+
+The panel edits saved styles with sliders and draws sample paths live on test
+targets (a square, a thin L, a ring, a walking square), with a zoomed inset,
+hit rate and timing; it saves, duplicates, deletes and compares styles. It
+works on the same folder as the command line and the bridge, and only this
+computer can connect to it.
+
 To use styles from another program, in any language, run the bridge and
 talk JSON lines over stdin/stdout. It picks a style for each click, returns
 timed events to play back, and tallies the results you report:
@@ -254,7 +267,7 @@ normal stream of `mousemove`, `mousedown` and `mouseup` events.
 | [`ax.py`](humanized_input/ax.py) | Reads Chromium's **accessibility tree** over the DevTools Protocol. This is what screen readers actually consume, not the HTML. |
 | [`pointer.py`](humanized_input/pointer.py) | Mouse movement: Fitts's law timing, minimum-jerk submovements, corrective moves, curved paths, click scatter, tremor. |
 | [`fit.py`](humanized_input/fit.py) | Measure recorded clicks and fit a profile's pointer fields to them by simulation. |
-| [`experiment.py`](humanized_input/experiment.py), [`bridge.py`](humanized_input/bridge.py) | Compare mouse styles on irregular shapes; a JSON-lines bridge for other programs that logs which styles work. |
+| [`experiment.py`](humanized_input/experiment.py), [`bridge.py`](humanized_input/bridge.py), [`styles.py`](humanized_input/styles.py), [`ui.py`](humanized_input/ui.py) | Compare mouse styles on irregular shapes; a JSON-lines bridge for other programs that logs which styles work. |
 | [`population.py`](humanized_input/population.py) | Speed-accuracy trade-off, a population of different users, practice and fatigue. |
 | [`backends/`](humanized_input/backends/__init__.py) | The small interface (snapshot, focused, press) that lets the same user drive a browser ([`browser.py`](humanized_input/backends/browser.py)) or a Windows app ([`windows_uia.py`](humanized_input/backends/windows_uia.py): UI Automation to AXItems, [`win_input.py`](humanized_input/backends/win_input.py): SendInput keystrokes and mouse). |
 | [`desktop.py`](humanized_input/desktop.py) | Launch or attach to a Windows app by window title. |
