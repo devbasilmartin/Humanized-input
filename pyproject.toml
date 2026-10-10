@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "humanized-input"
+version = "0.1.0"
+description = "Profile-driven pointer and keyboard models: simulated users, fitted mouse profiles, mouse-style experiments"
+requires-python = ">=3.10"
+dependencies = ["pyyaml>=6"]
+
+[project.optional-dependencies]
+browser = ["playwright>=1.45"]
+windows = ["uiautomation>=2.0.20; sys_platform == 'win32'"]
+test = ["pytest>=8", "playwright>=1.45"]
+
+[tool.setuptools]
+packages = ["humanized_input", "humanized_input.backends"]
