@@ -37,7 +37,7 @@ _TIME_FIELDS = ("reaction_s", "pointer_a_s", "pointer_b_s")
 # Fields that are rates: larger is faster.
 _RATE_FIELDS = ("typing_wpm", "speech_wpm")
 # Fields that are error sizes: larger is sloppier.
-_ERROR_FIELDS = ("typo_rate", "pointer_spread")
+_ERROR_FIELDS = ("typo_rate", "pointer_spread", "pointer_noise_px")
 
 
 def _scale(profile: Profile, time: float = 1.0, rate: float = 1.0, error: float = 1.0,

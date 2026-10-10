@@ -34,11 +34,12 @@ def test_fitts_law_harder_targets_take_longer():
 
 @pytest.mark.parametrize("name", ["expert", "intermediate", "novice"])
 @pytest.mark.parametrize("seed", range(20))
-def test_move_ends_inside_the_target(name, seed):
+def test_move_ends_on_or_just_beside_the_target(name, seed):
     box = Rect(500, 300, 30, 20)
     events, _ = planner(name, seed).plan_move((20, 700), box)
     assert all(e.delay_before >= 0 for e in events)
-    assert box.contains(events[-1].x, events[-1].y)
+    # Near-misses happen, but always close to the target.
+    assert box.inset(-15, -15).contains(events[-1].x, events[-1].y)
     # Every step is a small, pixel-sized mouse report, never a teleport.
     path = [(20, 700)] + pointer_path(events)
     assert max(math.dist(a, b) for a, b in zip(path, path[1:])) < 120
@@ -70,9 +71,20 @@ def test_double_click_has_two_presses():
     assert [e.kind for e in events if e.kind != "move"] == ["down", "up", "down", "up"]
 
 
+def test_most_moves_land_on_target():
+    box = Rect(500, 300, 30, 20)
+    landed = [box.contains(*pointer_path(planner(n, s).plan_move((20, 700), box)[0])[-1])
+              for n in ("expert", "intermediate", "novice") for s in range(60)]
+    assert sum(landed) / len(landed) > 0.9
+
+
+def test_small_targets_are_missed_more_often():
+    assert hit_rate("intermediate", Rect(600, 400, 12, 12)) < hit_rate("intermediate", Rect(600, 400, 48, 48))
+
+
 def test_tremor_misses_small_targets_more_than_large_ones():
     small, large = Rect(600, 400, 12, 12), Rect(600, 400, 48, 48)
-    assert hit_rate("expert", small) == 1.0  # no tremor: always on target
+    assert hit_rate("expert", small) > 0.95  # no tremor: only the odd near-miss
     assert hit_rate("motor", small) < hit_rate("motor", large)
     assert hit_rate("motor", small) < 0.95
 

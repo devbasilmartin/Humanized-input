@@ -84,8 +84,9 @@ Automation; WinForms, WPF, WinUI, Qt and Chromium/Electron apps expose a lot.
 2. `python examples/fit_my_pointer.py pointer-recording.json --save profiles/me.yaml`
 
 [`fit.py`](humanized_input/fit.py) measures the recording (Fitts's law
-intercept and slope, click scatter, path bow, pause before pressing, hold
-time, drift while held). It then tunes the pointer fields until the
+intercept and slope, click scatter and its fixed floor, path bow, how far
+and how long the first fast stroke goes, pause before pressing, hold time,
+drift while held). It then tunes the pointer fields until the
 simulated user, clicking the same targets from the same start points,
 produces the same numbers. The report also lists measures that are not
 fitted, such as where in the movement the speed peaks and how many
@@ -186,8 +187,11 @@ How [`pointer.py`](humanized_input/pointer.py) models a hand:
    short corrective moves follow after a pause until the pointer is on target.
 3. **Minimum-jerk velocity.** Each move speeds up smoothly and slows to a stop.
 4. **Curved paths.** Paths bow to one side (`pointer_curvature`).
-5. **Click scatter.** Aim points spread around the centre with SD = W/4.133,
-   the "effective width" convention from Fitts's law research (`pointer_spread`).
+5. **Click scatter.** Aim points spread around the centre with an SD that has
+   a fixed part in pixels (`pointer_noise_px`) and a part that grows with the
+   target (`pointer_spread`; 1.0 is W/4.133, the Fitts's law "effective width"
+   convention). An aim point just outside the target is a near-miss, so small
+   targets get missed more often, as in real recordings.
 6. **Tremor** (`pointer_tremor_px`). A 4-8 Hz wobble whose size varies,
    and which continues while the button is held down. If the release lands off
    the target, the app never sees a click. That is a WCAG 2.5.8 (Target Size)

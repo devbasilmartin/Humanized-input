@@ -13,8 +13,9 @@ Every field maps to something you can observe in real screen reader users:
 - navigation: the strategy they use to find things (see user.py).
 - pointer_*: how they use a mouse, when they use one (see pointer.py).
   pointer_a_s / pointer_b_s are the Fitts's law constants (seconds, and
-  seconds per bit of difficulty); pointer_spread scales how widely clicks
-  scatter; pointer_curvature how much paths bow; pointer_tremor_px the
+  seconds per bit of difficulty); click scatter has a part that grows with the
+  target (pointer_spread, where 1.0 means an SD of W/4.133) and a fixed part
+  in pixels (pointer_noise_px), so small targets get missed more often; pointer_curvature how much paths bow; pointer_tremor_px the
   amplitude of hand tremor; pointer_reach the share of the distance the first
   fast stroke covers and pointer_primary_frac the share of the Fitts time it
   takes (many people flick most of the way, then home in slowly); pointer_settle_s the pause on the target before
@@ -46,7 +47,8 @@ class Profile:
     navigation: str = "tab"
     pointer_a_s: float = 0.10
     pointer_b_s: float = 0.15
-    pointer_spread: float = 1.0
+    pointer_spread: float = 0.75
+    pointer_noise_px: float = 0.8
     pointer_curvature: float = 0.08
     pointer_tremor_px: float = 0.0
     pointer_reach: float = 0.95
@@ -71,8 +73,8 @@ class Profile:
             raise ValueError("think_s must be (low, high) with 0 <= low <= high")
         if self.pointer_a_s < 0 or self.pointer_b_s <= 0:
             raise ValueError("pointer_a_s must be >= 0 and pointer_b_s > 0")
-        if self.pointer_spread < 0 or self.pointer_tremor_px < 0:
-            raise ValueError("pointer_spread and pointer_tremor_px must be >= 0")
+        if self.pointer_spread < 0 or self.pointer_tremor_px < 0 or self.pointer_noise_px < 0:
+            raise ValueError("pointer_spread, pointer_noise_px and pointer_tremor_px must be >= 0")
         if not 0 < self.pointer_reach <= 1.2 or not 0 < self.pointer_primary_frac <= 1:
             raise ValueError("pointer_reach must be in (0, 1.2] and pointer_primary_frac in (0, 1]")
         if self.pointer_settle_s <= 0 or self.pointer_hold_s <= 0:
@@ -110,6 +112,7 @@ BUILTIN_PROFILES: dict[str, Profile] = {
         navigation="quicknav",
         pointer_a_s=0.08,
         pointer_b_s=0.11,
+        pointer_spread=0.6,
     ),
     "intermediate": Profile(
         name="intermediate",
@@ -137,7 +140,8 @@ BUILTIN_PROFILES: dict[str, Profile] = {
         navigation="linear",
         pointer_a_s=0.15,
         pointer_b_s=0.20,
-        pointer_spread=1.3,
+        pointer_spread=0.75,
+        pointer_noise_px=1.0,
         pointer_curvature=0.12,
     ),
     "motor": Profile(
@@ -155,7 +159,8 @@ BUILTIN_PROFILES: dict[str, Profile] = {
         navigation="tab",
         pointer_a_s=0.30,
         pointer_b_s=0.35,
-        pointer_spread=1.6,
+        pointer_spread=0.9,
+        pointer_noise_px=1.2,
         pointer_curvature=0.15,
         pointer_tremor_px=4.0,
     ),

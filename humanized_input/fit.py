@@ -6,7 +6,8 @@ sample, and the button press and release. `measure` boils a set of trials
 down to the numbers motor-control research uses to describe pointing:
 
 - Fitts's law intercept and slope (movement time against difficulty),
-- click scatter relative to target size, and the miss rate,
+- click scatter: a part that grows with target size and a fixed floor in
+  pixels, and the miss rate (not fitted, so it tests the scatter model),
 - how much paths bow, where in the movement the speed peaks, and how
   many corrective submovements there are,
 - the pause on the target before pressing, how long the button is held,
@@ -185,9 +186,18 @@ def measure(trials: list[Trial]) -> dict[str, float]:
     hits = [t for t in trials if t.hit]
     mts = [t.down[0] - _onset(t) for t in hits]
     a, b = _fit_line([t.difficulty for t in hits], mts) if len(hits) > 2 else (math.nan, math.nan)
-    scatter = math.sqrt(statistics.mean(
-        ((t.down[1] - t.box.center[0]) / t.width) ** 2 + ((t.down[2] - t.box.center[1]) / t.width) ** 2
-        for t in trials) / 2) * 4.133
+    # Scatter SD in pixels for each target size, then SD = floor + slope * W.
+    by_width: dict[float, list[Trial]] = {}
+    for t in trials:
+        by_width.setdefault(t.width, []).append(t)
+    widths = sorted(by_width)
+    sds = [math.sqrt(statistics.mean(
+        ((t.down[1] - t.box.center[0]) ** 2 + (t.down[2] - t.box.center[1]) ** 2) / 2 for t in by_width[w]))
+        for w in widths]
+    if len(widths) > 1:
+        floor, slope = _fit_line(widths, sds)
+    else:
+        floor, slope = math.nan, sds[0] / widths[0]
 
     settle, drift, peak_at, subs, reach, primary_t = [], [], [], [], [], []
     for t in trials:
@@ -211,7 +221,8 @@ def measure(trials: list[Trial]) -> dict[str, float]:
         "fitts_a_s": a,
         "fitts_b_s_per_bit": b,
         "miss_rate": 1 - len(hits) / len(trials),
-        "click_scatter": scatter,
+        "click_scatter": slope * 4.133,
+        "scatter_floor_px": floor,
         "path_bow": statistics.mean(_bow(t) for t in far) if far else math.nan,
         "first_stroke_reach": statistics.median(reach) if reach else math.nan,
         "first_stroke_time": statistics.median(primary_t) if primary_t else math.nan,
@@ -228,6 +239,7 @@ FITTED = {
     "fitts_a_s": "pointer_a_s",
     "fitts_b_s_per_bit": "pointer_b_s",
     "click_scatter": "pointer_spread",
+    "scatter_floor_px": "pointer_noise_px",
     "path_bow": "pointer_curvature",
     "first_stroke_reach": "pointer_reach",
     "first_stroke_time": "pointer_primary_frac",
@@ -262,7 +274,7 @@ def fit_profile(trials: list[Trial], base: Profile | str = "intermediate", name:
             want, got, cur = target[key], sim[key], getattr(p, fld)
             if math.isnan(want) or math.isnan(got):
                 continue
-            if key == "fitts_a_s":
+            if key in ("fitts_a_s", "scatter_floor_px"):
                 changes[fld] = max(0.0, cur + (want - got))
             elif key == "hold_drift_px" and want <= 0.5:
                 changes[fld] = 0.0  # a steady hand: no tremor at all

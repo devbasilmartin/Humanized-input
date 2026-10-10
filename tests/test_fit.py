@@ -23,7 +23,7 @@ def ring_geometry(widths=(12, 24, 48), distances=(150, 300, 500), n=9):
     return trials
 
 
-HIDDEN = replace(BUILTIN_PROFILES["novice"], pointer_a_s=0.2, pointer_b_s=0.14, pointer_spread=0.8,
+HIDDEN = replace(BUILTIN_PROFILES["novice"], pointer_a_s=0.2, pointer_b_s=0.14, pointer_spread=0.8, pointer_noise_px=1.0,
                  pointer_curvature=0.05, pointer_tremor_px=1.5, pointer_settle_s=0.2, pointer_hold_s=0.13,
                  pointer_reach=0.7, pointer_primary_frac=0.35)
 
@@ -42,12 +42,25 @@ def test_fit_recovers_a_hidden_profile():
     fitted, want, got = fit_profile(recording, "intermediate", repeats=1)
     for key in FITTED:
         assert got[key] == pytest.approx(want[key], rel=0.1, abs=0.02), key
-    for fld in ("pointer_spread", "pointer_curvature", "pointer_settle_s", "pointer_hold_s", "pointer_tremor_px",
-                "pointer_reach", "pointer_primary_frac"):
+    # Scatter noise, spread and tremor all move the press point, so on a small
+    # sample they trade off; the settings below are pinned down on their own.
+    for fld in ("pointer_settle_s", "pointer_hold_s", "pointer_tremor_px", "pointer_reach",
+                "pointer_primary_frac"):
         assert getattr(fitted, fld) == pytest.approx(getattr(HIDDEN, fld), rel=0.2), fld
+    # Sideways landing error (which grows with spread) also bends paths.
+    assert fitted.pointer_curvature == pytest.approx(HIDDEN.pointer_curvature, rel=0.35)
+    # Misses are not fitted, so predicting them tests the scatter model.
+    assert got["miss_rate"] == pytest.approx(want["miss_rate"], abs=0.04)
     # Non-pointer traits come from the base profile.
     assert fitted.typing_wpm == BUILTIN_PROFILES["intermediate"].typing_wpm and fitted.name == "me"
     assert "fitted" in compare(want, got)
+
+
+def test_scatter_has_a_fixed_floor_and_a_part_that_grows_with_size():
+    m = measure(simulate(replace(HIDDEN, pointer_tremor_px=0, pointer_noise_px=2.0, pointer_spread=0.5),
+                         ring_geometry(), repeats=4))
+    assert m["scatter_floor_px"] == pytest.approx(2.0, abs=0.8)
+    assert m["click_scatter"] == pytest.approx(0.5, abs=0.15)
 
 
 def test_load_recording_accepts_blocks_or_per_click_documents(tmp_path):

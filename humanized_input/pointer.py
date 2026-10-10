@@ -23,8 +23,10 @@ The model follows the motor-control literature:
    real accessibility bug (WCAG 2.5.8 Target Size) found the way users hit it.
 
 Aim points scatter around the target centre with a standard deviation of
-W / 4.133. That is the "effective width" convention from Fitts's law research,
-where about 96% of clicks land inside a target of width W.
+noise + spread * W / 4.133. At spread 1.0 and no noise that is the "effective
+width" convention from Fitts's law research (about 96% of clicks inside along
+each axis); the fixed noise term makes small targets relatively harder, as
+real recordings show. An aim point outside the target is a near-miss.
 """
 
 from __future__ import annotations
@@ -90,14 +92,19 @@ class PointerPlanner:
 
     def aim_point(self, box: Rect) -> tuple[float, float]:
         """Where the user means to click: near the centre, scattered like
-        real clicks, and always inside the box."""
+        real clicks. A point that lands inside the box keeps clear of its
+        edges by the tremor margin; one that lands outside stays there, which
+        is how real near-misses on small targets happen."""
         cx, cy = box.center
-        sx = box.width / 4.133 * self.profile.pointer_spread
-        sy = box.height / 4.133 * self.profile.pointer_spread
+        noise = self.profile.pointer_noise_px  # hand noise that does not shrink with the target
+        sx = noise + box.width / 4.133 * self.profile.pointer_spread
+        sy = noise + box.height / 4.133 * self.profile.pointer_spread
+        x, y = self.rng.gauss(cx, sx), self.rng.gauss(cy, sy)
+        if not box.contains(x, y):
+            return x, y  # misjudged where the target ends
         safe = self._safe_zone(box)
-        x = min(max(self.rng.gauss(cx, sx), safe.x), safe.x + safe.width)
-        y = min(max(self.rng.gauss(cy, sy), safe.y), safe.y + safe.height)
-        return x, y
+        return (min(max(x, safe.x), safe.x + safe.width),
+                min(max(y, safe.y), safe.y + safe.height))
 
     def _safe_zone(self, box: Rect) -> Rect:
         """The part of `box` the user is happy to stop in. Someone with a
@@ -160,14 +167,13 @@ class PointerPlanner:
         self._t = 0.0
 
         aim = self.aim_point(box)
-        safe = self._safe_zone(box)
         width = min(box.width, box.height)
         pos = (float(start[0]), float(start[1]))
         points: list[tuple[float, float, float]] = []
         for n in range(MAX_CORRECTIONS + 1):
             dist = math.hypot(aim[0] - pos[0], aim[1] - pos[1])
-            if n and safe.contains(round(pos[0]), round(pos[1])):
-                break  # the pointer reports whole pixels, so judge those
+            if n and dist <= 0.15 * width + 1:
+                break  # close enough to where they were aiming
             last = n == MAX_CORRECTIONS
             reach = self.profile.pointer_reach if n == 0 else 0.95
             end = aim if last or dist < 2 else self._landing(pos, aim, reach)
