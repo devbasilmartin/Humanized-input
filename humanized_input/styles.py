@@ -57,7 +57,7 @@ PARAMS = [
     ("pointer_hold_s", "Timing", "number", (0.01, 0.5, 0.005), "How long the button stays down (s)."),
     ("pointer_spread", "Accuracy", "number", (0.0, 2.0, 0.01),
      "Aim scatter that grows with target size (1.0 = SD of width / 4.133). Used by aim=human."),
-    ("pointer_noise_px", "Accuracy", "number", (0.0, 6.0, 0.05), "Aim scatter that stays the same at any size (px SD)."),
+    ("pointer_noise_px", "Accuracy", "number", (0.0, 40.0, 0.05), "Aim scatter that stays the same at any size (px SD)."),
     ("pointer_stop_tol", "Accuracy", "number", (0.0, 1.0, 0.01),
      "How close to the aim point (as a share of target size) before stopping corrections and clicking."),
     ("pointer_tremor_px", "Accuracy", "number", (0.0, 10.0, 0.1), "Hand tremor amplitude, also while the button is held (px)."),
@@ -78,6 +78,7 @@ STARTER = [
     MouseStyle("human-lead", path="human", aim="deepest", lead=True,
                description="the pointer model, leading moving targets"),
 ]
+
 
 
 def _slug(name: str) -> str:
@@ -101,6 +102,31 @@ def apply_changes(style: MouseStyle, changes: dict) -> MouseStyle:
     if profile_changes:
         style_changes["profile"] = replace(style.profile, **profile_changes)
     return replace(style, **style_changes)
+
+
+def _person(name: str, description: str, **fields) -> MouseStyle:
+    """A starter style with the human path and scatter, and these pointer_* settings."""
+    return apply_changes(MouseStyle(name, path="human", aim="human", description=description),
+                         {f"pointer_{k}": v for k, v in fields.items()})
+
+
+# Rough sketches of different people, from the research on pointing. Only the
+# Fitts throughput ranges are well measured; the rest are approximations.
+STARTER += [
+    _person("person-gamer", "practised fast flicks, short consistent clicks (rough sketch)",
+            a_s=0.08, b_s=0.12, flick_s=0.15, reach=0.97, reach_sd=0.04, stop_tol=0.25,
+            spread=0.5, noise_px=0.5, tremor_px=0.0, hold_s=0.06, settle_s=0.03),
+    _person("person-older-adult", "slower, more corrections, longer presses (rough sketch)",
+            a_s=0.30, b_s=0.35, flick_s=0.0, primary_frac=0.6, reach=0.85, reach_sd=0.15, stop_tol=0.08,
+            spread=0.9, noise_px=1.2, tremor_px=3.0, hold_s=0.20, settle_s=0.20),
+    _person("person-essential-tremor", "action tremor while aiming and pressing (rough sketch)",
+            a_s=0.35, b_s=0.40, flick_s=0.0, reach=0.75, reach_sd=0.25, stop_tol=0.10,
+            spread=1.0, noise_px=2.0, tremor_px=8.0, hold_s=0.25, settle_s=0.30),
+    replace(_person("person-eye-tracker", "gaze jumps, large jitter, dwell instead of a click (approximation)",
+                    a_s=0.05, b_s=0.05, flick_s=0.04, reach=1.0, reach_sd=0.05, stop_tol=0.5,
+                    spread=1.0, noise_px=25.0, tremor_px=3.0, hold_s=0.60, settle_s=0.40),
+            path="linear", speed=2.0),
+]
 
 
 class StyleLibrary:
