@@ -10,7 +10,8 @@ click (round-robin by default) so styles are compared on the same mix of
 targets, and `summary` tallies the real results.
 
   -> {"cmd": "click", "from": [x, y], "rect": [x, y, w, h]}
-  -> {"cmd": "click", "from": [x, y], "polygon": [[x, y], ...], "style": "optional name"}
+  -> {"cmd": "click", "from": [x, y], "polygon": [[x, y], ...], "style": "optional name",
+      "velocity": [vx, vy], "button": "right"}    # velocity (px/s) and button are optional
   <- {"id": 1, "style": "...", "aim": [x, y], "events": [{"type": "move", "x": 10, "y": 20, "delay": 0.008}, ...]}
   -> {"cmd": "result", "id": 1, "ok": true}
   <- {"id": 1, "logged": true}
@@ -42,6 +43,12 @@ from .experiment import MouseStyle, Shape, grid, plan
 
 
 def load_styles(path: str) -> list[MouseStyle]:
+    """Styles from a .yaml/.json file, or every style saved in a library folder."""
+    if Path(path).is_dir():
+        from .styles import StyleLibrary
+
+        lib = StyleLibrary(path)
+        return [lib.load(n) for n in lib.names()]
     text = Path(path).read_text(encoding="utf-8")
     if path.endswith((".yaml", ".yml")):
         import yaml
@@ -97,8 +104,9 @@ class Bridge:
                 raise ValueError("click needs a rect or a polygon")
             style = self._choose(msg.get("style"))
             self.next_id += 1
+            velocity = tuple(msg["velocity"]) if msg.get("velocity") else None
             events, aim = plan(style, tuple(msg["from"]), shape, seed=self.rng.randrange(2**31),
-                               button=msg.get("button", "left"))
+                               button=msg.get("button"), velocity=velocity)
             box = shape.box
             self.pending[self.next_id] = {"style": style.name, "w": box.width, "h": box.height,
                                           "seconds": sum(e.delay_before for e in events)}

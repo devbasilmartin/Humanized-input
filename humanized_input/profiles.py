@@ -200,3 +200,17 @@ def load_profile(name_or_path: str) -> Profile:
     else:
         data = json.loads(text)
     return Profile.from_dict(data)
+
+
+def save_profile(profile: Profile, path) -> Path:
+    """Write a profile to .yaml/.yml or .json; load_profile reads it back."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data = profile.to_dict()
+    if path.suffix in (".yaml", ".yml"):
+        import yaml
+
+        path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    else:
+        path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    return path

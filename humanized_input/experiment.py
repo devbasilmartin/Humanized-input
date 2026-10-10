@@ -4,13 +4,18 @@ A MouseStyle combines a Profile (all the pointer_* settings) with a few
 switches that are easy to compare:
 
 - path:  "human" (the full pointer model), "linear" (a straight line at
-  constant speed) or "instant" (jump straight there).
+  constant speed), "ease" (pyautogui.moveTo with easeOutQuad over a random
+  duration in ease_s, as simple bots do) or "instant" (jump straight there).
 - aim:   where in the target to click. "human" scatters around the shape's
-  centre like a person; "center" is the bounding-box centre; "centroid" the
+  centre like a person; "center" is the bounding-box centre; "middle" a
+  point scattered around it and kept in the box's middle half; "centroid" the
   centre of the shape's area; "deepest" the point furthest from every edge;
   "uniform" a random point inside the shape.
 - speed: multiplies the pace (2.0 = everything takes half as long).
 - aim_jitter_px: extra random offset added to any aim.
+- lead: for a moving target (a velocity given to plan()), aim where it will
+  be during the press, not where it is now.
+- clicks / button: double clicks, right clicks.
 
 Targets are Shapes: a rectangle, or a polygon for irregular outlines (a
 character model, an object in a scene). The bounding-box centre of an
@@ -35,8 +40,9 @@ from .pointer import POLL_HZ, PointerEvent, PointerPlanner, Rect
 from .profiles import Profile, load_profile
 from .timing import Humanizer
 
-PATHS = ("human", "linear", "instant")
-AIMS = ("human", "center", "centroid", "deepest", "uniform")
+PATHS = ("human", "linear", "ease", "instant")
+AIMS = ("human", "center", "middle", "centroid", "deepest", "uniform")
+BUTTONS = ("left", "right", "middle")
 
 Point = tuple[float, float]
 
@@ -66,6 +72,9 @@ class Shape:
     def box(self) -> Rect:
         xs, ys = [p[0] for p in self.points], [p[1] for p in self.points]
         return Rect(min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys))
+
+    def moved(self, dx: float, dy: float) -> "Shape":
+        return Shape(tuple((x + dx, y + dy) for x, y in self.points))
 
     def _edges(self):
         return zip(self.points, self.points[1:] + self.points[:1])
@@ -134,23 +143,44 @@ class MouseStyle:
     aim: str = "human"
     speed: float = 1.0
     aim_jitter_px: float = 0.0
+    lead: bool = False
+    clicks: int = 1
+    button: str = "left"
+    ease_s: tuple[float, float] = (0.12, 0.3)
+    description: str = ""
 
     def __post_init__(self):
         if self.path not in PATHS:
             raise ValueError(f"path must be one of {PATHS}, got {self.path!r}")
         if self.aim not in AIMS:
             raise ValueError(f"aim must be one of {AIMS}, got {self.aim!r}")
-        if self.speed <= 0 or self.aim_jitter_px < 0:
-            raise ValueError("speed must be > 0 and aim_jitter_px >= 0")
+        if self.button not in BUTTONS:
+            raise ValueError(f"button must be one of {BUTTONS}, got {self.button!r}")
+        if self.speed <= 0 or self.aim_jitter_px < 0 or self.clicks < 1:
+            raise ValueError("speed must be > 0, aim_jitter_px >= 0 and clicks >= 1")
+        lo, hi = self.ease_s
+        if not 0 <= lo <= hi:
+            raise ValueError("ease_s must be (low, high) with 0 <= low <= high")
 
     @classmethod
     def from_dict(cls, data: dict) -> "MouseStyle":
-        """{name, profile: <built-in name or file>, path, aim, speed,
-        aim_jitter_px, overrides: {pointer_b_s: 0.2, ...}}"""
+        """{name, profile: <built-in name, file path, or an inline profile>,
+        path, aim, speed, aim_jitter_px, lead, clicks, button, ease_s,
+        overrides: {pointer_b_s: 0.2, ...}}"""
         data = dict(data)
-        profile = load_profile(data.pop("profile", "intermediate"))
+        profile = data.pop("profile", "intermediate")
+        profile = Profile.from_dict(profile) if isinstance(profile, dict) else load_profile(profile)
         overrides = data.pop("overrides", {}) or {}
+        if "ease_s" in data:
+            data["ease_s"] = tuple(data["ease_s"])
         return cls(profile=replace(profile, **overrides), **data)
+
+    def to_dict(self) -> dict:
+        """Everything needed to rebuild this style, with its profile inline."""
+        return {"name": self.name, "description": self.description, "path": self.path, "aim": self.aim,
+                "speed": self.speed, "aim_jitter_px": self.aim_jitter_px, "lead": self.lead,
+                "clicks": self.clicks, "button": self.button, "ease_s": list(self.ease_s),
+                "profile": self.profile.to_dict()}
 
 
 def grid(base: Profile | str = "intermediate", path=("human",), aim=("human",), speed=(1.0,),
@@ -179,6 +209,12 @@ def _aim_point(style: MouseStyle, shape: Shape, planner: PointerPlanner, rng: ra
         x, y = planner.aim_point(Rect(cx - b.width / 2, cy - b.height / 2, b.width, b.height))
     elif style.aim == "center":
         x, y = shape.box.center
+    elif style.aim == "middle":
+        # A typical simple bot: scatter of w/8 around the box centre, kept in its middle half.
+        b = shape.box
+        cx, cy = b.center
+        x = min(max(rng.gauss(cx, b.width / 8), b.x + b.width * 0.25), b.x + b.width * 0.75)
+        y = min(max(rng.gauss(cy, b.height / 8), b.y + b.height * 0.25), b.y + b.height * 0.75)
     elif style.aim == "centroid":
         x, y = shape.centroid
     elif style.aim == "deepest":
@@ -190,17 +226,31 @@ def _aim_point(style: MouseStyle, shape: Shape, planner: PointerPlanner, rng: ra
     return x, y
 
 
-def plan(style: MouseStyle, start: Point, shape: Shape, seed: int = 0,
-         button: str = "left") -> tuple[list[PointerEvent], Point]:
-    """The events for one click on `shape` from `start`, and the aim point."""
+def _ease_moves(start: Point, aim: Point, duration: float) -> list[PointerEvent]:
+    """pyautogui.moveTo(..., duration, tween=easeOutQuad): it steps at most
+    every 50 ms (pyautogui.MINIMUM_SLEEP), so short moves are a few big jumps."""
+    dx, dy = aim[0] - start[0], aim[1] - start[1]
+    steps = max(1, int(max(abs(dx), abs(dy))))
+    if duration / steps < 0.05:
+        steps = max(1, int(duration / 0.05))
+    out = []
+    for i in range(1, steps + 1):
+        t = i / steps
+        f = -t * (t - 2)  # easeOutQuad
+        out.append(PointerEvent("move", round(start[0] + dx * f), round(start[1] + dy * f), duration / steps))
+    return out
+
+
+def _plan_once(style: MouseStyle, start: Point, shape: Shape, seed: int) -> tuple[list[PointerEvent], Point]:
     planner = PointerPlanner(Humanizer(style.profile.with_seed(seed)))
     rng = random.Random(seed ^ 0x5EED)
     aim = _aim_point(style, shape, planner, rng)
     box = shape.box
     p = style.profile
+    button = style.button
 
     if style.path == "human":
-        events = planner.plan_click(start, box, button, aim=aim)
+        events = planner.plan_click(start, box, button, clicks=style.clicks, aim=aim)
     else:
         target = (round(aim[0]), round(aim[1]))
         events = []
@@ -215,20 +265,65 @@ def plan(style: MouseStyle, start: Point, shape: Shape, seed: int = 0,
                 if xy != last:
                     events.append(PointerEvent("move", *xy, 1 / POLL_HZ))
                     last = xy
+        elif style.path == "ease":
+            events = _ease_moves(start, aim, rng.uniform(*style.ease_s))
         if not events or (events[-1].x, events[-1].y) != target:
             events.append(PointerEvent("move", *target, 1 / POLL_HZ))
-        events.append(PointerEvent("down", *target, p.pointer_settle_s if style.path == "linear" else 0.02, button))
-        events.append(PointerEvent("up", *target, p.pointer_hold_s, button))
+        pause = {"linear": p.pointer_settle_s, "ease": rng.uniform(0.03, 0.08)}.get(style.path, 0.02)
+        hold = 0.0 if style.path == "ease" else p.pointer_hold_s  # pyautogui.click() has no hold
+        for c in range(style.clicks):
+            events.append(PointerEvent("down", *target, pause if c == 0 else 0.1, button))
+            events.append(PointerEvent("up", *target, hold, button))
 
     if style.speed != 1.0:
         events = [replace(e, delay_before=e.delay_before / style.speed) for e in events]
     return events, aim
 
 
-def landed(events: list[PointerEvent], shape: Shape) -> bool:
-    """True if every press and release happened on the shape."""
-    presses = [e for e in events if e.kind in ("down", "up")]
-    return bool(presses) and all(shape.contains(e.x, e.y) for e in presses)
+def _press_time(events: list[PointerEvent]) -> float:
+    """Halfway between the first press and its release: the moment to centre
+    a moving target on, so both land on it."""
+    t, down = 0.0, None
+    for e in events:
+        t += e.delay_before
+        if e.kind == "down" and down is None:
+            down = t
+        elif e.kind == "up" and down is not None:
+            return (down + t) / 2
+    return t
+
+
+def plan(style: MouseStyle, start: Point, shape: Shape, seed: int = 0, button: str | None = None,
+         velocity: Point | None = None) -> tuple[list[PointerEvent], Point]:
+    """The events for one click on `shape` from `start`, and the aim point.
+
+    `velocity` (px/s) is how fast the target is moving. With style.lead the
+    aim goes where the target will be mid-press (between the button going
+    down and coming up, so both land on it); without it
+    the click is planned on where the target is now.
+    """
+    if button is not None and button != style.button:
+        style = replace(style, button=button)
+    events, aim = _plan_once(style, start, shape, seed)
+    if style.lead and velocity and any(velocity):
+        for _ in range(3):  # the move's length depends on the aim, so refine a few times
+            t = _press_time(events)
+            events, aim = _plan_once(style, start, shape.moved(velocity[0] * t, velocity[1] * t), seed)
+    return events, aim
+
+
+def landed(events: list[PointerEvent], shape: Shape, velocity: Point | None = None) -> bool:
+    """True if every press and release happened on the shape (on where a
+    moving shape had got to at that moment)."""
+    t, presses = 0.0, []
+    for e in events:
+        t += e.delay_before
+        if e.kind in ("down", "up"):
+            presses.append((e, t))
+    if not presses:
+        return False
+    vx, vy = velocity or (0.0, 0.0)
+    return all(shape.contains(e.x - vx * t, e.y - vy * t) for e, t in presses)
 
 
 # --- comparing ---------------------------------------------------------------------------------
@@ -243,23 +338,25 @@ class Result:
     p90_s: float
 
 
-def evaluate(styles: list[MouseStyle], shapes: list[Shape], trials: int = 200, seed: int = 0,
+def evaluate(styles: list[MouseStyle], shapes: list, trials: int = 200, seed: int = 0,
              start_distance: tuple[float, float] = (150, 500)) -> list[Result]:
     """Click each shape `trials` times per style from random start points
-    `start_distance` px away. Every style sees the same start points."""
+    `start_distance` px away. Every style sees the same start points. A
+    target can be a Shape, or (Shape, (vx, vy)) for one moving in px/s."""
     rng = random.Random(seed)
     jobs = []
     for i in range(trials):
-        shape = shapes[i % len(shapes)]
+        target = shapes[i % len(shapes)]
+        shape, velocity = target if isinstance(target, tuple) else (target, None)
         cx, cy = shape.box.center
         a, d = rng.uniform(0, 2 * math.pi), rng.uniform(*start_distance)
-        jobs.append((shape, (cx + d * math.cos(a), cy + d * math.sin(a)), seed * 1_000_003 + i))
+        jobs.append((shape, velocity, (cx + d * math.cos(a), cy + d * math.sin(a)), seed * 1_000_003 + i))
     results = []
     for style in styles:
         hits, times = 0, []
-        for shape, start, s in jobs:
-            events, _ = plan(style, start, shape, s)
-            hits += landed(events, shape)
+        for shape, velocity, start, s in jobs:
+            events, _ = plan(style, start, shape, s, velocity=velocity)
+            hits += landed(events, shape, velocity)
             times.append(sum(e.delay_before for e in events))
         q = statistics.quantiles(times, n=10)[-1] if len(times) > 1 else times[0]
         results.append(Result(style.name, len(jobs), hits / len(jobs), statistics.mean(times), q))

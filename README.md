@@ -100,8 +100,22 @@ from a real hand.
 [`experiment.py`](humanized_input/experiment.py) compares ways of clicking on
 targets of any shape: rectangles, or polygons for irregular outlines whose
 centre is not on the shape. A style picks a `path` (`human`, `linear`,
-`instant`), an `aim` (`human`, `center`, `centroid`, `deepest`, `uniform`),
-a `speed` multiplier, extra `aim_jitter_px`, and any `pointer_*` setting.
+`ease` like `pyautogui.moveTo`, `instant`), an `aim` (`human`, `center`,
+`middle`, `centroid`, `deepest`, `uniform`), a `speed` multiplier, extra
+`aim_jitter_px`, `lead` (aim ahead of a moving target), `clicks`, `button`,
+and any `pointer_*` setting.
+
+Save as many styles as you like in a folder and manage them from the command line:
+
+```bash
+python -m humanized_input.styles starter                  # a few to begin with
+python -m humanized_input.styles new me --profile profiles/me.yaml --set aim=deepest --set lead=true
+python -m humanized_input.styles edit me --set speed=1.3 --set pointer_spread=0.4
+python -m humanized_input.styles list
+python -m humanized_input.styles compare                  # every saved style, in simulation
+```
+
+`compare` includes a target walking at 120 px/s; styles with `lead` keep hitting it.
 
 ```
 $ python examples/compare_styles.py
@@ -117,8 +131,8 @@ talk JSON lines over stdin/stdout. It picks a style for each click, returns
 timed events to play back, and tallies the results you report:
 
 ```bash
-python -m humanized_input.bridge examples/mouse_styles.yaml --log outcomes.jsonl
-python -m humanized_input.bridge examples/mouse_styles.yaml --log outcomes.jsonl --summary
+python -m humanized_input.bridge styles/ --log outcomes.jsonl      # a folder, or a .yaml file
+python -m humanized_input.bridge styles/ --log outcomes.jsonl --summary
 ```
 
 See [`bridge.py`](humanized_input/bridge.py) for the message format. From

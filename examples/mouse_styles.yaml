@@ -2,11 +2,13 @@
 #   python -m humanized_input.bridge examples/mouse_styles.yaml --log outcomes.jsonl
 # Every pointer_* profile setting can go under `overrides`.
 styles:
+  - {name: skillbot-classic, path: ease, aim: middle}     # a quick eased glide into the box middle
   - {name: precise, path: instant, aim: deepest}
   - {name: precise-glide, path: linear, aim: deepest}
   - {name: naive-centre, path: linear, aim: center}
   - {name: human, path: human, aim: human}
   - {name: human-deepest, path: human, aim: deepest}
+  - {name: human-lead, path: human, aim: deepest, lead: true}  # aims ahead of moving targets
   - name: human-fast-sloppy
     path: human
     aim: human

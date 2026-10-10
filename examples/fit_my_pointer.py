@@ -14,6 +14,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from humanized_input.fit import compare, fit_profile, load_recording
+from humanized_input.profiles import save_profile
 
 
 def main():
@@ -33,16 +34,7 @@ def main():
         if key.startswith("pointer_"):
             print(f"  {key:<22}{value:.3f}")
     if args.save:
-        data = profile.to_dict()
-        out = Path(args.save)
-        if out.suffix in (".yaml", ".yml"):
-            import yaml
-
-            out.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
-        else:
-            import json
-
-            out.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        out = save_profile(profile, args.save)
         print(f"\nSaved to {out}; load it with load_profile({str(out)!r})")
 
 
